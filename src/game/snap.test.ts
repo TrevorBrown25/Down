@@ -17,6 +17,7 @@ const BASE: SnapInput = {
   ballOn: 25,
   protect: false,
   mods: NO_MODS,
+  firedCounts: {},
 }
 
 /** Run the same snap across many seeds so probabilistic rules are covered. */
@@ -70,6 +71,22 @@ describe('Steel Curtain — No Deep Help', () => {
       if (result.event === 'sack' || result.turnover) continue
       expect(result.yards).toBeGreaterThanOrEqual(18)
     }
+  })
+})
+
+describe('Steel Curtain — No Deep Help expires', () => {
+  const deep = { playName: 'Deep Pass' as const, formName: 'Gun 11' as const }
+
+  test('stops rescuing deep balls once it has already burned them twice', () => {
+    const outcomes = many({ ...deep, firedCounts: { singleHigh: 2 } })
+    expect(outcomes.every((o) => !o.fired.includes('singleHigh'))).toBe(true)
+    // With the rule closed, deep balls fall incomplete again.
+    expect(outcomes.some((o) => o.result.event === 'incomplete')).toBe(true)
+  })
+
+  test('is still open on the second burn', () => {
+    const outcomes = many({ ...deep, firedCounts: { singleHigh: 1 } })
+    expect(outcomes.some((o) => o.fired.includes('singleHigh'))).toBe(true)
   })
 })
 

@@ -3,7 +3,13 @@ import { DECKS, type DeckName } from '../game/cards'
 import { OPPONENT_NAMES } from '../game/opponents'
 import { RULES } from '../game/engine'
 import { playGame } from './play'
-import { coachPolicy, randomPolicy } from './policy'
+import {
+  chipsPolicy,
+  coachPolicy,
+  informedPolicy,
+  randomPolicy,
+  veteranPolicy,
+} from './policy'
 
 const DECK_NAMES = Object.keys(DECKS) as DeckName[]
 const MATCHUPS = DECK_NAMES.flatMap((d) => OPPONENT_NAMES.map((o) => [d, o] as const))
@@ -51,5 +57,61 @@ describe('playGame', () => {
     const r = playGame({ seed: 9, archetype: 'Pro Style', opponentName: 'The Shell' }, coachPolicy)
     const tallied = Object.values(r.events).reduce((a, b) => a + b, 0)
     expect(tallied).toBe(r.snaps)
+  })
+})
+
+describe('policy hooks', () => {
+  const opts = { seed: 5, archetype: 'Pro Style' as const, opponentName: 'The Shell' }
+
+  test('the pre-snap hook runs before the call is made', () => {
+    let ran = 0
+    playGame(opts, {
+      ...coachPolicy,
+      name: 'spy',
+      preSnap: (game) => {
+        ran++
+        return game
+      },
+    })
+    expect(ran).toBeGreaterThan(0)
+  })
+
+  test('the challenge hook can throw the flag, but only once', () => {
+    let asked = 0
+    const r = playGame(opts, {
+      ...coachPolicy,
+      name: 'flagger',
+      challenge: () => {
+        asked++
+        return true
+      },
+    })
+    expect(asked).toBeGreaterThan(0)
+    expect(r.challenges).toBe(1)
+    expect(r.finished).toBe(true)
+  })
+
+  test('a policy that ignores the hooks spends nothing', () => {
+    expect(playGame(opts, coachPolicy).chipsSpent).toBe(0)
+  })
+
+  test('the chips policy actually spends chips', () => {
+    expect(playGame(opts, chipsPolicy).chipsSpent).toBeGreaterThan(0)
+  })
+
+  test('the informed policy learns the coverage', () => {
+    expect(playGame(opts, informedPolicy).reads).toBeGreaterThan(0)
+  })
+
+  test('hook-using policies still terminate in every matchup', () => {
+    for (const policy of [chipsPolicy, informedPolicy, veteranPolicy]) {
+      for (const o of OPPONENT_NAMES) {
+        for (let seed = 1; seed <= 20; seed++) {
+          expect(playGame({ seed, archetype: 'Air Raid', opponentName: o }, policy).finished).toBe(
+            true,
+          )
+        }
+      }
+    }
   })
 })

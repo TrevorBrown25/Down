@@ -1,6 +1,7 @@
 import { makeRng, pick, shuffle, type Rng } from './rng'
 import {
   buildDeck,
+  COVERAGES,
   OFF_FORMATIONS,
   OFF_PLAYS,
   PACKAGES,
@@ -18,7 +19,7 @@ import {
 } from './cards'
 import { OPPONENTS, type Opponent } from './opponents'
 import { clamp } from './resolve'
-import { resolveSnap, type SnapOutcome } from './snap'
+import { resolveSnap, type SnapInput, type SnapOutcome } from './snap'
 
 export const RULES = {
   target: 17,
@@ -72,6 +73,8 @@ export type Game = {
 
   groupsInHand: Personnel[]
   tossUsed: boolean
+  /** An audible frees the call from the personnel that was declared. */
+  audibled: boolean
   quickArmed: boolean
   protectArmed: boolean
   juiceArmed: boolean
@@ -82,14 +85,33 @@ export type Game = {
   disguised: boolean
 
   lastSnap: SnapOutcome | null
+  /**
+   * Kept so a challenge can re-roll the identical snap. Deliberately excludes
+   * the opponent, which carries functions — Game must stay JSON-serializable
+   * for save files.
+   */
+  lastSnapInput: Omit<SnapInput, 'opponent'> | null
   lastCall: { form: OffFormationName; play: OffPlayName } | null
   revealed: Record<string, boolean>
+  /** Drives rules that change once they have burned the defense enough times. */
+  ruleFireCounts: Record<string, number>
   log: LogEntry[]
   notice: string | null
 }
 
 const isPlayCard = (c: Card): c is PlayCard => c.type === 'play'
 const opponentOf = (game: Game): Opponent => OPPONENTS[game.opponentName]
+
+/**
+ * The plays that may actually be called right now. Personnel binds the call —
+ * those eleven are on the field until the next snap — unless an audible has
+ * freed it.
+ */
+export const legalPlays = (game: Game): PlayCard[] =>
+  game.hand.filter(
+    (c): c is PlayCard =>
+      c.type === 'play' && (game.audibled || personnelOf(c.form) === game.declared),
+  )
 
 export const spot = (y: number) =>
   y <= 50 ? `own ${Math.round(y)}` : `opp ${Math.round(100 - y)}`
@@ -169,6 +191,7 @@ function startDown(game: Game, rng: Rng, fresh: boolean): Game {
     defCov: null,
     defAdj: null,
     tossUsed: false,
+    audibled: false,
     quickArmed: false,
     protectArmed: false,
     juiceArmed: false,
@@ -176,6 +199,7 @@ function startDown(game: Game, rng: Rng, fresh: boolean): Game {
     known: null,
     disguised: false,
     lastSnap: null,
+    lastSnapInput: null,
     lastCall: null,
     phase: 'personnel',
   }
@@ -211,6 +235,7 @@ export function newGame(
     defAdj: null,
     groupsInHand: [],
     tossUsed: false,
+    audibled: false,
     quickArmed: false,
     protectArmed: false,
     juiceArmed: false,
@@ -218,12 +243,161 @@ export function newGame(
     known: null,
     disguised: false,
     lastSnap: null,
+    lastSnapInput: null,
     lastCall: null,
     revealed: {},
+    ruleFireCounts: {},
     log: [],
     notice: null,
   }
   return startDown(base, rng, true)
+}
+
+/** Throw one card back and redraw. Once per down. */
+export function toss(game: Game, cardId: number, rng: Rng): Game {
+  if (game.tossUsed) return game
+  const card = game.hand.find((c) => c.id === cardId)
+  if (!card) return game
+
+  // Never let the player strand themselves: the prototype happily let you toss
+  // the only play your declared personnel could run, leaving the down unplayable.
+  if (game.declared && isPlayCard(card)) {
+    const survivors = legalPlays(game).filter((c) => c.id !== cardId)
+    if (survivors.length === 0) return game
+  }
+
+  const drawn = drawTo(
+    game.hand.length,
+    {
+      deck: game.deck,
+      hand: game.hand.filter((c) => c.id !== cardId),
+      discard: [...game.discard, card],
+    },
+    rng,
+  )
+  return { ...game, ...drawn, tossUsed: true }
+}
+
+/** Spend a chip for one extra card, right now. */
+export function hurryUp(game: Game, rng: Rng): Game {
+  if (game.chips < 1) return game
+  const drawn = drawTo(
+    game.hand.length + 1,
+    { deck: game.deck, hand: game.hand, discard: game.discard },
+    rng,
+  )
+  // Deck and discard both empty — do not charge for a card that never arrives.
+  if (drawn.hand.length === game.hand.length) return game
+  return { ...game, ...drawn, chips: game.chips - 1 }
+}
+
+/** Motion or Hot Read: buy information about the coverage. One read per down. */
+export function playInfoCard(game: Game, cardId: number, rng: Rng): Game {
+  if (game.known !== null || !game.defCov) return game
+  const card = game.hand.find((c) => c.id === cardId)
+  if (!card || card.type !== 'adj') return game
+  if (card.name !== 'Motion' && card.name !== 'Hot Read') return game
+
+  const spent: Game = {
+    ...game,
+    hand: game.hand.filter((c) => c.id !== cardId),
+    discard: [...game.discard, card],
+  }
+
+  if (card.name === 'Hot Read') {
+    return { ...spent, known: game.defCov, disguised: false }
+  }
+
+  // Motion only tells you man or zone, and they lie about it 30% of the time.
+  const truth = COVERAGES[game.defCov].man ? 'man' : 'zone'
+  const lying = rng() < 0.3
+  return {
+    ...spent,
+    known: lying ? (truth === 'man' ? 'zone' : 'man') : truth,
+    disguised: lying,
+  }
+}
+
+/**
+ * Change the call at the line. Reads are quick adjustments and resolve first,
+ * so motioning to diagnose the coverage and then audibling to beat it both fit
+ * inside one down.
+ */
+export function playAudible(game: Game, cardId: number, rng: Rng): Game {
+  if (game.audibled || !game.declared) return game
+  const card = game.hand.find((c) => c.id === cardId)
+  if (!card || card.type !== 'adj' || card.name !== 'Audible') return game
+  void rng
+  return {
+    ...game,
+    hand: game.hand.filter((c) => c.id !== cardId),
+    discard: [...game.discard, card],
+    audibled: true,
+  }
+}
+
+export type ChipAbility = 'protect' | 'juice' | 'fresh' | 'quick'
+
+const armedCost = (game: Game) =>
+  (game.protectArmed ? 1 : 0) + (game.juiceArmed ? 2 : 0) + (game.freshArmed ? 2 : 0)
+
+const affords = (game: Game, cost: number) => armedCost(game) + cost <= game.chips
+
+/**
+ * Toggle a chip ability before the snap. Refuses anything the stack cannot pay
+ * for, rather than the prototype's behaviour of arming it and then silently
+ * dropping it at the snap.
+ */
+export function armChip(game: Game, which: ChipAbility): Game {
+  switch (which) {
+    case 'quick': {
+      if (game.quickArmed) return { ...game, quickArmed: false }
+      const holding = game.hand.some((c) => c.type === 'adj' && c.name === 'Quick Count')
+      return holding ? { ...game, quickArmed: true } : game
+    }
+    case 'protect':
+      if (game.protectArmed) return { ...game, protectArmed: false }
+      return affords(game, 1) ? { ...game, protectArmed: true } : game
+    case 'juice':
+      if (game.juiceArmed) return { ...game, juiceArmed: false }
+      return affords(game, 2) ? { ...game, juiceArmed: true } : game
+    case 'fresh':
+      if (game.freshArmed) return { ...game, freshArmed: false }
+      return affords(game, 2) ? { ...game, freshArmed: true } : game
+  }
+}
+
+/** Throw the flag: re-roll the snap that just happened. Once per game. */
+export function challenge(game: Game, rng: Rng): Game {
+  const input = game.lastSnapInput
+  if (game.challengeUsed || !input) return game
+
+  const outcome = resolveSnap({ opponent: opponentOf(game), ...input }, rng)
+  const rules = opponentOf(game).rules
+  // The re-roll replaces the snap, so rebuild the fire counts from the pre-snap
+  // snapshot the input carries instead of stacking on the original's fires.
+  const ruleFireCounts = { ...input.firedCounts }
+  const revealed = { ...game.revealed }
+  for (const key of outcome.fired) {
+    if (!rules[key]?.visible) revealed[key] = true
+    ruleFireCounts[key] = (ruleFireCounts[key] ?? 0) + 1
+  }
+
+  const sign = outcome.result.yards >= 0 ? '+' : ''
+  return {
+    ...game,
+    challengeUsed: true,
+    lastSnap: outcome,
+    revealed,
+    ruleFireCounts,
+    log: [
+      {
+        kind: 'divider',
+        text: `CHALLENGE — rerolled to ${outcome.result.event} ${sign}${outcome.result.yards}`,
+      },
+      ...game.log,
+    ],
+  }
 }
 
 /** How often the defense shows a late wrinkle, and which one. */
@@ -238,7 +412,7 @@ export function callPlay(game: Game, cardId: number, rng: Rng): Game {
   const card = game.hand.find((c) => c.id === cardId)
   if (!card || !isPlayCard(card)) return game
   if (!game.defForm || !game.defCov || !game.defPack || !game.declared) return game
-  if (personnelOf(card.form) !== game.declared) return game
+  if (!game.audibled && personnelOf(card.form) !== game.declared) return game
 
   let hand = game.hand
   let discard = game.discard
@@ -263,23 +437,21 @@ export function callPlay(game: Game, cardId: number, rng: Rng): Game {
 
   const defAdj = quick ? null : pickDefAdj(card.form, rng)
 
-  const outcome = resolveSnap(
-    {
-      opponent: opponentOf(game),
-      formName: card.form,
-      playName: card.play,
-      defFormName: game.defForm,
-      coverageName: game.defCov,
-      defAdj,
-      charge: game.charge,
-      down: game.down,
-      possession: game.possessionsUsed + 1,
-      ballOn: game.ballOn,
-      protect,
-      mods: { juice, bonusBlockers: fresh ? 1 : 0 },
-    },
-    rng,
-  )
+  const input: Omit<SnapInput, 'opponent'> = {
+    formName: card.form,
+    playName: card.play,
+    defFormName: game.defForm,
+    coverageName: game.defCov,
+    defAdj,
+    charge: game.charge,
+    down: game.down,
+    possession: game.possessionsUsed + 1,
+    ballOn: game.ballOn,
+    protect,
+    mods: { juice, bonusBlockers: fresh ? 1 : 0 },
+    firedCounts: game.ruleFireCounts,
+  }
+  const outcome = resolveSnap({ opponent: opponentOf(game), ...input }, rng)
 
   const play = OFF_PLAYS[card.play]
   const cashesCharge = play.kind === 'pass' && play.pa === true
@@ -293,8 +465,10 @@ export function callPlay(game: Game, cardId: number, rng: Rng): Game {
 
   const rules = opponentOf(game).rules
   const revealed = { ...game.revealed }
+  const ruleFireCounts = { ...game.ruleFireCounts }
   for (const key of outcome.fired) {
     if (!rules[key]?.visible) revealed[key] = true
+    ruleFireCounts[key] = (ruleFireCounts[key] ?? 0) + 1
   }
 
   const spent = (protect ? 1 : 0) + (juice ? 2 : 0) + (fresh ? 2 : 0)
@@ -320,7 +494,9 @@ export function callPlay(game: Game, cardId: number, rng: Rng): Game {
     charge,
     defAdj,
     revealed,
+    ruleFireCounts,
     lastSnap: outcome,
+    lastSnapInput: input,
     lastCall: { form: card.form, play: card.play },
     log: [entry, ...game.log],
     phase: 'result',
@@ -393,6 +569,8 @@ export function punt(game: Game, rng: Rng): Game {
 
 export function fieldGoal(game: Game, rng: Rng): Game {
   const dist = 100 - game.ballOn + 17
-  const made = rng() < clamp(1.05 - 0.015 * dist, 0.05, 0.98)
+  // Roughly real-world: ~95% from 27, ~85% from 35, ~78% from 42, ~68% from 50.
+  // The old curve was about half of this, which made kicking strictly wrong.
+  const made = rng() < clamp(1.26 - 0.0115 * dist, 0.2, 0.97)
   return endDrive(game, made ? 3 : 0, `${dist}-yard FG — ${made ? 'GOOD' : 'NO GOOD'}`, rng)
 }

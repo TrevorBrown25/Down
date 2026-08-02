@@ -1,111 +1,121 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+@import 'tailwindcss';
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+@theme {
+  /* A real coach's board: slate green, not "dark mode". */
+  --color-board: #26352e;
+  --color-board-deep: #1b271f;
+  --color-board-edge: #10180f;
+  --color-chalk: #eef3e6;
+  --color-chalk-dim: #a9b6a2;
+  --color-chalk-faint: #6a7a66;
+  --color-hash: #4a5c4b;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* Offense is drawn in chalk. The defense is drawn in the red pen. */
+  --color-oline: #f2f6ec;
+  --color-skill: #8fd0ff;
+  --color-defense: #ff8f6b;
+  --color-charge: #f6c445;
+  --color-chip: #7fe0a8;
+  --color-danger: #ff7a7a;
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
+  --font-display: 'Anton', 'Impact', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-board-edge);
+    color: var(--color-chalk);
+    font-family: var(--font-mono);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: var(--color-charge);
+    color: var(--color-board-edge);
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+@layer utilities {
+  /* Chalk dust: fine grain over the whole board so nothing reads as flat fill. */
+  .chalkboard {
+    background-color: var(--color-board);
+    background-image:
+      radial-gradient(ellipse 120% 80% at 50% -10%, rgba(255, 255, 255, 0.07), transparent 70%),
+      radial-gradient(ellipse 90% 60% at 15% 110%, rgba(0, 0, 0, 0.35), transparent 70%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
   }
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
+  /* The smeared ghost of last week's game plan. */
+  .chalk-smear::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(ellipse 40% 22% at 22% 30%, rgba(238, 243, 230, 0.045), transparent 70%),
+      radial-gradient(ellipse 30% 30% at 78% 68%, rgba(238, 243, 230, 0.035), transparent 70%);
+  }
+
+  .chalk-line {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .rule-line {
+    box-shadow: 0 1px 0 rgba(238, 243, 230, 0.08);
+  }
+
+  .tape {
+    background: linear-gradient(180deg, #1f2c24, #17211b);
+    box-shadow:
+      inset 0 1px 0 rgba(238, 243, 230, 0.06),
+      0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+
+  .scrollbar-chalk::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-chalk::-webkit-scrollbar-thumb {
+    background: var(--color-hash);
+    border-radius: 3px;
+  }
+  .scrollbar-chalk::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+@keyframes slam {
+  0% {
+    transform: scale(2.4) rotate(-4deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.92) rotate(1deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
   }
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
+
+@keyframes pulse-charge {
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 0 transparent);
   }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+  50% {
+    opacity: 0.72;
+    filter: drop-shadow(0 0 6px var(--color-charge));
+  }
 }

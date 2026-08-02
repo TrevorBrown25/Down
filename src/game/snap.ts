@@ -34,6 +34,8 @@ export type SnapInput = {
   /** "Max Protect" chip. */
   protect: boolean
   mods: SnapModifiers
+  /** How many times each opponent rule has fired so far this game. */
+  firedCounts: Record<string, number>
 }
 
 export type SnapOutcome = {
@@ -59,6 +61,7 @@ export function resolveSnap(input: SnapInput, rng: Rng): SnapOutcome {
     down: input.down,
     possession: input.possession,
     ballOn: input.ballOn,
+    firedCounts: input.firedCounts,
   }
 
   let state: PreSnapState = {

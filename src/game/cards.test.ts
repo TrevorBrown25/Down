@@ -16,10 +16,10 @@ import { makeRng } from './rng'
 const DECK_NAMES = Object.keys(DECKS) as DeckName[]
 
 describe('deck data', () => {
-  test.each(DECK_NAMES)('%s is 20 plays plus 4 adjustments', (name) => {
+  test.each(DECK_NAMES)('%s is 20 plays plus 6 adjustments', (name) => {
     const deck = buildDeck(name, makeRng(1))
     expect(deck.filter((c) => c.type === 'play')).toHaveLength(20)
-    expect(deck.filter((c) => c.type === 'adj')).toHaveLength(4)
+    expect(deck.filter((c) => c.type === 'adj')).toHaveLength(6)
   })
 
   test.each(DECK_NAMES)('%s only references formations and plays that exist', (name) => {

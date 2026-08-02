@@ -19,6 +19,8 @@ export type SnapContext = {
   possession: number
   /** 0 = own goal line, 100 = their goal line. */
   ballOn: number
+  /** How many times each rule has already fired this game. */
+  firedCounts: Record<string, number>
 }
 
 export type PreSnapState = { def: DefLook; charge: number }
@@ -60,8 +62,10 @@ export const OPPONENTS: Record<string, Opponent> = {
   'Steel Curtain': {
     name: 'Steel Curtain',
     match: () => 'Base',
+    // Still tilted toward man and light deep help — that is who they are — but
+    // Cover 1 Blitz lands ~33% of the time rather than 60%.
     pickCoverage: (pool, _ctx, rng) =>
-      weighted(pool, (c) => (c === 'Cover 3' ? 0.5 : COVERAGES[c].deepHelp <= 1 ? 3 : 1.5), rng),
+      weighted(pool, (c) => (c === 'Cover 3' ? 1 : COVERAGES[c].deepHelp <= 1 ? 1.5 : 2), rng),
     rules: {
       // Declaration order is execution order: gassed must run before ironFront
       // reads the possession count.
@@ -90,11 +94,14 @@ export const OPPONENTS: Record<string, Opponent> = {
       },
       singleHigh: {
         name: 'No Deep Help',
-        text: "A deep ball that isn't sacked always connects — big.",
+        text: "A deep ball that isn't sacked always connects — big. They roll a safety over the top after it burns them twice.",
         visible: false,
         postSnap: (ctx, result, _def, rng) => {
           if (!DEEP_SHOTS.includes(ctx.playName)) return null
           if (result.event === 'sack' || result.turnover) return null
+          // Burned twice and they finally adjust. The window is the reward for
+          // discovering the rule; leaving it open all game is not a game.
+          if ((ctx.firedCounts.singleHigh ?? 0) >= 2) return null
           // Still counts as fired when the base result was already big — the
           // read was right either way, so the player should learn the rule.
           if (result.yards >= 18) return result

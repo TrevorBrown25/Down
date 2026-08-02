@@ -47,14 +47,23 @@ export function applyDefAdj(look: DefLook, name: DefAdjName | null): DefLook {
       ...look.cov,
       boxSupport: look.cov.boxSupport + (a.boxSupport ?? 0),
       deepHelp: look.cov.deepHelp + (a.deepHelp ?? 0),
+      underneath: look.cov.underneath + (a.underneath ?? 0),
     },
   }
 }
 
-/** Play action pulls the defense forward: more box, less deep help. */
+/**
+ * Play action pulls the defense forward: more box, and both levels of coverage
+ * thin out as the underneath defenders step up to meet the run.
+ */
 export function applyPA(cov: Coverage, charge: number): Coverage {
   if (charge <= 0) return cov
-  return { ...cov, boxSupport: cov.boxSupport + charge, deepHelp: cov.deepHelp - 1 }
+  return {
+    ...cov,
+    boxSupport: cov.boxSupport + charge,
+    deepHelp: cov.deepHelp - 1,
+    underneath: cov.underneath - 1,
+  }
 }
 
 export type SnapModifiers = {
@@ -118,7 +127,15 @@ export function resolvePass(
   }
 
   const matchup = def.cov.man ? play.vsMan : -play.vsMan
-  const cover = def.cov.deepHelp + def.form.cov - play.depth
+  // Which defenders are actually in position depends on how far the route runs.
+  // Deep help never polices the quick game, and vice versa.
+  const help =
+    play.depth >= 3
+      ? def.cov.deepHelp
+      : play.depth === 2
+        ? (def.cov.deepHelp + def.cov.underneath) / 2
+        : def.cov.underneath
+  const cover = help + def.form.cov - play.depth
   let inc = clamp(0.16 + cover * 0.08 + play.depth * 0.07 - matchup * 0.11, 0.04, 0.75)
   if (play.allOrNothing) {
     inc = clamp(inc + 0.1 - (def.form.box >= 7 ? 0.25 : 0), 0.04, 0.8)

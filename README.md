@@ -30,7 +30,7 @@ src/
     snap.ts      one snap end to end: pre-snap rules → physics → chips → post-snap rules
     engine.ts    the state machine: downs, drives, possessions, scoring
   sim/           headless balance harness, runs under vitest
-    policy.ts    pluggable AI: random, coach, go-for-it
+    policy.ts    pluggable AI policies used as ablations
     play.ts      plays a game to completion, aggregates results
   ui/            React lives here and nowhere else
 ```
@@ -65,13 +65,77 @@ Two kinds of test live here, and they are not the same thing:
 matchup. When a deliberate tuning change moves those numbers, update the table on
 purpose.
 
-## Known design problems
+## Balance
 
-Measured, not guessed — run `npm run sim`.
+Measured, not guessed — run `npm run sim`. Nine policies play every matchup:
 
-1. **The matchup spread runs 5%–89%.** Against two of three opponents the game is
-   effectively decided at deck select.
-2. **Punting and kicking are traps.** Going for it on every 4th down beats the
-   situational policy in all nine matchups.
-3. **"Steel Curtain" is a Pittsburgh Steelers trademark.** Rename before this is
+| policy | what it represents |
+| --- | --- |
+| `random` | the floor — no thought at all |
+| `coach` | reads down and distance, has not scouted the opponent |
+| `go-for-it` | the coach, but never surrenders a possession |
+| `grinder` | a player who has learned The Shell's counter |
+| `chips` | the coach, spending chips situationally |
+| `informed` | the coach, buying and using coverage reads |
+| `oracle` | perfect free coverage knowledge — isolates the value of information |
+| `anti-oracle` | perfect knowledge used to pick the *worst* play — the control |
+| `veteran` | chips, reads and the flag together |
+
+Policies are ablations. Each one changes exactly one thing against the `coach`
+baseline, so the delta is the value of that mechanic. `anti-oracle` exists so a
+null result can be trusted: if choosing badly with perfect information were not
+clearly worse, a flat `oracle` would only prove the scorer was noise.
+
+Measured value, mean win-rate delta vs `coach` over all nine matchups:
+
+| mechanic | delta |
+| --- | --- |
+| chips | **+10pp** |
+| chips + challenge flag | **+15pp** |
+| Quick Count (`quick-count`) | +2pp |
+| Audible (`audible`) | +1pp |
+| coverage reads (`informed`) | 0pp |
+| perfect free coverage (`oracle`) | **+5pp** |
+| perfect knowledge, worst choice | −18pp |
+
+To an EV-maximising caller who cannot be outplayed anywhere else, knowing the
+coverage rather than only the package is worth **+8.2pp** — see
+`src/sim/decision.test.ts`.
+
+### Settled
+
+- **Steel Curtain** ran 89% against Air Raid. `No Deep Help` now closes after it
+  burns them twice, and Cover 1 Blitz dropped from 60% of their calls to ~33%.
+  Now 69%.
+- **Punt and field goal** were strictly dominated — a 42-yarder made 42% *and*
+  cost you the drive, in a game with only five. The kicker is now roughly
+  real-world and neither policy dominates the other, which is pinned as a test.
+- **Air Raid** carries a real inside-zone package out of 12 personnel, so it can
+  execute the answer to a two-deep shell instead of just losing to it.
+- **Coverages now differ in what they do, not just their label.** Each has an
+  `underneath` rating alongside `deepHelp`, and the resolver picks which applies
+  from the route's depth — so Cover 3 stops the run and the bomb while
+  surrendering the quick game, which is the trade it is supposed to make. Passes
+  got real man/zone identities to match (`Quick Pass +2` through
+  `Play Action −2`) instead of three of five sharing the same value. This took a
+  coverage read from worthless to **+8.2pp**, and dragged The Shell up from 6–7%
+  to 22–23% against passing decks as a side effect.
+
+### Open
+
+1. **Reads are priced at exactly break-even.** Knowing the coverage is now worth
+   **+5pp**, but buying that knowledge with a Motion or a Hot Read nets **0pp** —
+   the card it costs is worth about what the read gains. That is a defensible
+   price rather than a dead card, and it varies by matchup (best +7pp, worst
+   −8pp), so it is a real decision. Whether it should be slightly *profitable*
+   is a design call. The same is true of the Audible at +2pp.
+
+2. **Ground & Pound now beats The Shell 60% of the time**, which makes it the
+   softest matchup on the board. The coverage rework lifted the whole column and
+   overshot for the heavy deck.
+3. **Rules are still mostly one-way valves.** Each is a pure gift or a pure tax
+   rather than a decision. `Gasses Out` and the new `No Deep Help` expiry are the
+   only two that change state mid-game, and they are the most interesting rules
+   in the build.
+4. **"Steel Curtain" is a Pittsburgh Steelers trademark.** Rename before this is
    public.

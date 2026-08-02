@@ -16,7 +16,7 @@ export type DefFormationName = '3-4' | '4-3' | '4-2-5' | 'Dime'
 export type PackageName = 'Base' | 'Nickel' | 'Dime'
 export type CoverageName = 'Cover 3' | 'Cover 2' | 'Cover 2 Man' | 'Cover 1 Blitz'
 export type DefAdjName = 'Run Commit' | 'Creeper' | 'Bail'
-export type AdjustmentName = 'Motion' | 'Hot Read' | 'Quick Count'
+export type AdjustmentName = 'Motion' | 'Hot Read' | 'Quick Count' | 'Audible'
 export type DeckName = 'Ground & Pound' | 'Pro Style' | 'Air Raid'
 
 export type OffFormation = {
@@ -88,8 +88,8 @@ export const OFF_PLAYS: Record<OffPlayName, OffPlay> = {
     base: 6,
     depth: 1,
     time: 1,
-    vsMan: 1,
-    text: 'Beats man & blitz. Zone sits on it.',
+    vsMan: 2,
+    text: 'Slants and rubs. Kills man and blitz. Zone sits on it.',
   },
   'Deep Pass': {
     kind: 'pass',
@@ -104,27 +104,27 @@ export const OFF_PLAYS: Record<OffPlayName, OffPlay> = {
     base: 18,
     depth: 3,
     time: 3,
-    vsMan: 1,
+    vsMan: -1,
     allOrNothing: true,
-    text: 'All or nothing. Feasts on base defense.',
+    text: 'Floods the deep zones. All or nothing vs base defense.',
   },
   'TE Leak': {
     kind: 'pass',
     base: 8,
     depth: 2,
     time: 2,
-    vsMan: 0,
+    vsMan: -1,
     countsAsRun: true,
-    text: 'A pass that builds ◆ like a run.',
+    text: 'Sits in the hole in zone. Builds ◆ like a run.',
   },
   'Play Action': {
     kind: 'pass',
     base: 10,
     depth: 2,
     time: 3,
-    vsMan: -1,
+    vsMan: -2,
     pa: true,
-    text: 'Cashes ◆. Needs time.',
+    text: 'Linebackers bite in zone. Cashes ◆. Needs time.',
   },
 }
 
@@ -152,40 +152,56 @@ export const PACKAGES: Record<
 export type Coverage = {
   rush: number
   boxSupport: number
+  /** Defenders over the top. Polices deep routes. */
   deepHelp: number
+  /** Defenders sitting short. Polices the quick game. */
+  underneath: number
   man: boolean
 }
 
+/**
+ * Every coverage buys one thing by selling another, and the hole is what makes
+ * it worth reading. Cover 3 stops the run and the bomb and hands you the quick
+ * game; Cover 1 Blitz brings pressure and tight man with nothing over the top.
+ */
 export const COVERAGES: Record<CoverageName, Coverage> = {
-  'Cover 3': { rush: 4, boxSupport: 1, deepHelp: 3, man: false },
-  'Cover 2': { rush: 4, boxSupport: 0, deepHelp: 2, man: false },
-  'Cover 2 Man': { rush: 4, boxSupport: -1, deepHelp: 2, man: true },
-  'Cover 1 Blitz': { rush: 6, boxSupport: 1, deepHelp: 1, man: true },
+  'Cover 3': { rush: 4, boxSupport: 1, deepHelp: 3, underneath: 0, man: false },
+  'Cover 2': { rush: 4, boxSupport: 0, deepHelp: 2, underneath: 1, man: false },
+  'Cover 2 Man': { rush: 4, boxSupport: -1, deepHelp: 2, underneath: 2, man: true },
+  'Cover 1 Blitz': { rush: 6, boxSupport: 1, deepHelp: 1, underneath: 2, man: true },
 }
 
 export type DefAdj = {
   boxSupport?: number
   deepHelp?: number
+  underneath?: number
   rush?: number
   cov?: number
 }
 
 export const DEF_ADJ: Record<DefAdjName, DefAdj> = {
-  'Run Commit': { boxSupport: 2, deepHelp: -1 },
+  // Everyone crashes the run, so both levels of coverage thin out.
+  'Run Commit': { boxSupport: 2, deepHelp: -1, underneath: -1 },
   Creeper: { rush: 1, cov: -1 },
-  Bail: { boxSupport: -1, cov: 1 },
+  // Drop out of the box and sit on the routes.
+  Bail: { boxSupport: -1, underneath: 1, cov: 1 },
 }
+
+/** Reads are quick adjustments: play one, then still get your audible. */
+export const QUICK_ADJUSTMENTS: readonly AdjustmentName[] = ['Motion', 'Hot Read']
 
 export const ADJ_TEXT: Record<AdjustmentName, string> = {
   Motion: 'Learn MAN or ZONE. They may disguise.',
   'Hot Read': 'See their exact coverage. No disguise.',
   'Quick Count': 'Snap fast — their adjustment never comes.',
+  Audible: 'Change the call at the line. Any play in your hand, whatever they matched.',
 }
 
 const ADJ_LIST: readonly (readonly [AdjustmentName, number])[] = [
   ['Motion', 2],
   ['Hot Read', 1],
   ['Quick Count', 1],
+  ['Audible', 2],
 ]
 
 export type DeckEntry = readonly [OffFormationName, OffPlayName, number]
@@ -229,16 +245,19 @@ export const DECKS: Record<DeckName, { blurb: string; list: readonly DeckEntry[]
   },
   'Air Raid': {
     blurb: 'Throw it. Then throw it again.',
+    // Carries a real inside-zone package out of 12 personnel. Without it the
+    // deck has no way to execute the answer to a two-deep shell, which turns a
+    // hard matchup into an unwinnable one.
     list: [
       ['Gun 11', 'Quick Pass', 3],
       ['Gun 11', 'Deep Pass', 2],
-      ['Gun 11', 'Four Verticals', 2],
+      ['Gun 11', 'Four Verticals', 1],
       ['Gun 12', 'Quick Pass', 2],
       ['Gun 12', 'TE Leak', 2],
       ['Gun 12', 'Outside Run', 1],
       ['Singleback', 'TE Leak', 1],
-      ['Singleback', 'Play Action', 2],
-      ['Singleback', 'Inside Run', 2],
+      ['Singleback', 'Play Action', 1],
+      ['Singleback', 'Inside Run', 4],
       ['Singleback', 'Outside Run', 1],
       ['I-Form', 'Play Action', 1],
       ['I-Form', 'Inside Run', 1],
