@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sim": "vitest run src/sim/balance.test.ts -t prints --disable-console-intercept"
   },
   "dependencies": {
     "howler": "^2.2.4",
