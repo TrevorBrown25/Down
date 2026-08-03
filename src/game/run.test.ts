@@ -4,6 +4,7 @@ import { STARTERS, type StyleName } from './cards'
 import { legalPlays, type Game } from './engine'
 import {
   SEASON,
+  chooseEventOption,
   finishGame,
   newRun,
   removeCard,
@@ -117,13 +118,20 @@ describe('playing the season', () => {
 })
 
 describe('the draft', () => {
+  /**
+   * A week between games is event first, then draft, so the offer only exists
+   * once the scenario has been answered.
+   */
   const offered = (won: boolean) => {
     const run = newRun('Pro Style', 8)
-    return finishGame(run, finished(startGame(run, makeRng(1)), won), makeRng(1))
+    const done = finishGame(run, finished(startGame(run, makeRng(1)), won), makeRng(1))
+    return chooseEventOption(done, 0, makeRng(1))
   }
 
-  test('offers three cards after a game', () => {
-    expect(offered(true).pending?.cards).toHaveLength(3)
+  test('offers at least the standard three cards after a game', () => {
+    // An event may widen it, so the floor is what is guaranteed. The exact
+    // widening is pinned in events.test.ts against a forced scenario.
+    expect(offered(true).pending?.cards.length).toBeGreaterThanOrEqual(SEASON.draftSize)
   })
 
   test('offers a draft after a loss too — you still learn something', () => {
@@ -147,16 +155,49 @@ describe('the draft', () => {
     expect(after.pending).toBeNull()
   })
 
+  /** An offer with cuts already paid for, whatever scenario the seed drew. */
+  const withCuts = (n: number): Run => {
+    const run = offered(true)
+    if (!run.pending) throw new Error('expected an offer')
+    return { ...run, pending: { ...run.pending, cuts: n } }
+  }
+
   test('removing a card shrinks the deck by exactly one', () => {
-    const run = skipDraft(offered(true))
+    const run = withCuts(1)
     const victim = run.deck[0]
     const after = removeCard(run, victim.id)
     expect(after.deck).toHaveLength(run.deck.length - 1)
     expect(after.deck.map((c) => c.id)).not.toContain(victim.id)
   })
 
+  test('a cut spends the cut the week paid for', () => {
+    const after = removeCard(withCuts(1), withCuts(1).deck[0].id)
+    expect(after.pending?.cuts).toBe(0)
+  })
+
+  test('you cannot cut more than the week bought', () => {
+    // FIXED BUG: this used to be unbounded, so one cut week let a player strip
+    // the sheet to the floor — the strongest lever in the game, for free.
+    let run = withCuts(1)
+    const before = run.deck.length
+    for (let i = 0; i < 10; i++) run = removeCard(run, run.deck[0].id)
+    expect(run.deck).toHaveLength(before - 1)
+  })
+
+  test('a two-cut week really does cut twice', () => {
+    let run = withCuts(2)
+    const before = run.deck.length
+    for (let i = 0; i < 10; i++) run = removeCard(run, run.deck[0].id)
+    expect(run.deck).toHaveLength(before - 2)
+  })
+
+  test('there is no cutting once the offer is gone', () => {
+    const run = skipDraft(offered(true))
+    expect(removeCard(run, run.deck[0].id).deck).toHaveLength(run.deck.length)
+  })
+
   test('will not let you cut the deck below a playable size', () => {
-    let run = skipDraft(offered(true))
+    let run = withCuts(40)
     for (let i = 0; i < 40 && run.deck.length > 0; i++) {
       run = removeCard(run, run.deck[0].id)
     }

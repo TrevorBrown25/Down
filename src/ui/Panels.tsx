@@ -9,7 +9,7 @@ export function Scoreboard({ game }: { game: Game }) {
     <div className="tape flex items-stretch justify-between gap-6 rounded-sm px-5 py-2">
       <div className="flex items-baseline gap-3">
         <span className="font-display text-5xl leading-none text-chalk">{game.points}</span>
-        <span className="font-mono text-xs text-chalk-faint">/ {RULES.target}</span>
+        <span className="font-mono text-xs text-chalk-faint">/ {game.target}</span>
       </div>
 
       <div className="flex flex-1 items-center justify-center">

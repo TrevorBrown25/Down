@@ -1,37 +1,19 @@
 import { useState } from 'react'
 import { personnelOf, type Card } from '../game/cards'
-import { OPPONENTS } from '../game/opponents'
-import { SEASON, currentNode, type Run } from '../game/run'
+import { SEASON, type Run } from '../game/run'
 import { CardFace } from './CardFace'
+import { NextUp } from './NextUp'
 import { useGame } from './store'
 
-/** Scouting the next opponent is the point of drafting — show who is up. */
-function NextUp({ run }: { run: Run }) {
-  const node = currentNode(run)
-  if (!node) return null
-  const opponent = OPPONENTS[node.opponentName]
-  const visible = Object.values(opponent.rules).filter((r) => r.visible)
-
-  return (
-    <div className="tape mb-8 rounded-sm px-5 py-4">
-      <div className="font-mono text-[9px] uppercase tracking-[0.28em] text-chalk-faint">
-        week {node.week} · you face
-      </div>
-      <div className="mt-1 font-display text-3xl leading-none tracking-wide text-defense">
-        {node.opponentName.toUpperCase()}
-      </div>
-      <div className="mt-2 space-y-0.5">
-        {visible.map((r) => (
-          <div key={r.name} className="font-mono text-[10px] text-chalk-dim">
-            <span className="text-charge">{r.name}</span> — {r.text}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function CutList({ run, onCut }: { run: Run; onCut: (id: number) => void }) {
+function CutList({
+  run,
+  cuts,
+  onCut,
+}: {
+  run: Run
+  cuts: number
+  onCut: (id: number) => void
+}) {
   const [armed, setArmed] = useState(false)
   const atFloor = run.deck.length <= SEASON.minDeck
 
@@ -44,7 +26,9 @@ function CutList({ run, onCut }: { run: Run; onCut: (id: number) => void }) {
       >
         {atFloor
           ? `call sheet is at its floor of ${SEASON.minDeck}`
-          : 'or cut a play from the sheet instead'}
+          : cuts > 1
+            ? `this week bought you ${cuts} cuts — use them`
+            : 'or cut a play from the sheet instead'}
       </button>
     )
   }
@@ -58,7 +42,7 @@ function CutList({ run, onCut }: { run: Run; onCut: (id: number) => void }) {
     <div className="w-full">
       <div className="mb-3 flex items-baseline justify-between">
         <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-danger">
-          cut one — a leaner sheet draws its best cards more often
+          {cuts} to cut — a leaner sheet draws its best cards more often
         </span>
         <button
           onClick={() => setArmed(false)}
@@ -104,7 +88,7 @@ export function Draft({ run }: { run: Run }) {
         </p>
       </div>
 
-      <div className="mt-8">
+      <div className="mt-8 mb-8">
         <NextUp run={run} />
       </div>
 
@@ -132,7 +116,7 @@ export function Draft({ run }: { run: Run }) {
           pass — take nothing
         </button>
 
-        {offer.mayRemove && <CutList run={run} onCut={cut} />}
+        {offer.cuts > 0 && <CutList run={run} cuts={offer.cuts} onCut={cut} />}
       </div>
     </div>
   )

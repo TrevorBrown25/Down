@@ -1,7 +1,8 @@
-import { weighted, type Rng } from './rng'
+import { makeRng, weighted, type Rng } from './rng'
 import {
   COVERAGES,
   OFF_PLAYS,
+  PACKAGES,
   type CoverageName,
   type OffFormationName,
   type OffPlay,
@@ -479,3 +480,50 @@ export const OPPONENT_NAMES = Object.keys(OPPONENTS)
 /** Everyone who belongs in a given week of the schedule. */
 export const opponentsByTier = (tier: number): string[] =>
   OPPONENT_NAMES.filter((n) => OPPONENTS[n].tier === tier)
+
+export type CoverageLean = 'man' | 'zone' | 'balanced'
+
+const shareCache = new Map<string, number>()
+
+/**
+ * What fraction of snaps this opponent plays man, sampled from their own
+ * coverage picker across every personnel group and down they might see.
+ * Derived rather than hand-labelled, so it can never drift from what they
+ * actually call. Cached — it is a fixed property of the opponent.
+ */
+export function manShare(name: string): number {
+  const cached = shareCache.get(name)
+  if (cached !== undefined) return cached
+
+  const opponent = OPPONENTS[name]
+  const rng = makeRng(20260803)
+  let man = 0
+  let total = 0
+
+  for (const pers of ['21', '12', '11'] as const) {
+    const covs = PACKAGES[opponent.match(pers)].covs
+    for (const down of [1, 2, 3, 4]) {
+      for (const toGo of [2, 7, 12]) {
+        for (let i = 0; i < 40; i++) {
+          if (COVERAGES[opponent.pickCoverage(covs, { down, toGo }, rng)].man) man++
+          total++
+        }
+      }
+    }
+  }
+
+  const share = man / total
+  shareCache.set(name, share)
+  return share
+}
+
+export const coverageLean = (name: string): CoverageLean => {
+  const share = manShare(name)
+  return share >= 0.55 ? 'man' : share <= 0.28 ? 'zone' : 'balanced'
+}
+
+export const LEAN_TEXT: Record<CoverageLean, string> = {
+  man: 'route detail beats them',
+  zone: 'coverage recognition beats them',
+  balanced: 'no drill is a lock against them',
+}

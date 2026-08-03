@@ -409,6 +409,13 @@ export type Starter = {
   identity: string
   plays: readonly DeckEntry[]
   adjustments: readonly AdjEntry[]
+  /**
+   * What this team already does well on day one, as a practice week they never
+   * had to spend. This is the per-style difficulty dial: a deck that lives in
+   * 11 personnel blocks with six bodies and eats sacks the heavy styles never
+   * see, so it starts with something that pays that back.
+   */
+  camp: { group: Personnel; drill: 'blocking' | 'routes' | 'film' }[]
 }
 
 /**
@@ -423,6 +430,7 @@ export const STARTERS: Record<StyleName, Starter> = {
   'Ground & Pound': {
     blurb: 'Run it until they cry, then throw it over their heads.',
     identity: 'Lives in 21 personnel and banks ◆ faster than anyone.',
+    camp: [{ group: '21', drill: 'blocking' }],
     plays: [
       ['I-Form', 'Jumbo', 1],
       ['I-Form', 'Counter', 1],
@@ -434,6 +442,11 @@ export const STARTERS: Record<StyleName, Starter> = {
   'Air Raid': {
     blurb: 'Throw it. Then throw it again.',
     identity: 'Lives in 11 personnel and punishes anyone who stays heavy.',
+    camp: [
+      { group: '11', drill: 'routes' },
+      { group: '11', drill: 'blocking' },
+      { group: '11', drill: 'film' },
+    ],
     plays: [
       ['Gun 11', 'Stick', 1],
       ['Gun 11', 'Four Verticals', 1],
@@ -445,6 +458,7 @@ export const STARTERS: Record<StyleName, Starter> = {
   'Pro Style': {
     blurb: 'Everything out of one look. Take what they give you.',
     identity: 'Lives in 12 personnel. Your substitutions never tip what is coming.',
+    camp: [{ group: '12', drill: 'film' }],
     plays: [
       ['Singleback', 'Outside Zone', 1],
       ['Singleback', 'Dig', 1],

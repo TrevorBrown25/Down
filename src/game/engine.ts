@@ -17,17 +17,37 @@ import {
   type Personnel,
   type PlayCard,
 } from './cards'
+import type { GroupTrim } from './events'
 import { OPPONENTS, type Opponent } from './opponents'
 import { clamp } from './resolve'
 import { resolveSnap, type SnapInput, type SnapOutcome } from './snap'
 
 export const RULES = {
+  /**
+   * Points needed to win, by opponent tier. A better team scores more, so it
+   * takes more to beat them — this is the difficulty ramp, and without it every
+   * week plays the same regardless of who is across the field.
+   *
+   * Tuned per tier rather than as a linear step, because the reachable ladder
+   * in five possessions is coarse: 17 (2 TD + FG), 21 (3 TD), 24 (+FG), 27-28.
+   * 25 and 26 are not reachable at all, so they demand the same drive chart as
+   * 27 — measured, not assumed. Do not expect fine control from this dial.
+   */
+  targets: [17, 21, 25] as readonly number[],
+  /**
+   * The tier-1 bar, and the default for a one-off game with no season around
+   * it. Deliberately left where the fourth-down decision is genuinely close:
+   * one point higher and going for it dominates kicking everywhere.
+   */
   target: 17,
   possessions: 5,
   handSize: 6,
   maxCharge: 4,
   maxChips: 5,
 } as const
+
+/** What it takes to win against an opponent of this tier. */
+export const targetFor = (tier: number) => RULES.targets[tier - 1] ?? RULES.target
 
 export type Phase = 'personnel' | 'call' | 'result' | 'over'
 
@@ -48,6 +68,8 @@ export type LogEntry =
 export type Game = {
   archetype: DeckName
   opponentName: string
+  /** Points needed to win this one. Rises with the opponent's tier. */
+  target: number
 
   deck: Card[]
   hand: Card[]
@@ -95,6 +117,8 @@ export type Game = {
   revealed: Record<string, boolean>
   /** Drives rules that change once they have burned the defense enough times. */
   ruleFireCounts: Record<string, number>
+  /** Blocker adjustments per personnel group, carried in from the run. */
+  groupTrim: GroupTrim
   log: LogEntry[]
   notice: string | null
 }
@@ -215,12 +239,21 @@ export function newGame(
     opponentName: string
     /** A run owns its deck, so it hands one in rather than building from style. */
     deck?: readonly Card[]
+    /** Practice weeks and knocks, carried in from the run. */
+    groupTrim?: GroupTrim
+    /** Chips beyond the standing allowance, from an event. */
+    bonusChips?: number
+    /** Opponent rules a scouting week already uncovered. */
+    intel?: readonly string[]
+    /** Points needed to win. Defaults to the tier-1 bar. */
+    target?: number
   },
   rng: Rng = makeRng(opts.seed),
 ): Game {
   const base: Game = {
     archetype: opts.archetype,
     opponentName: opts.opponentName,
+    target: opts.target ?? RULES.target,
     deck: opts.deck ? shuffle(opts.deck, rng) : buildStarter(opts.archetype, rng),
     hand: [],
     discard: [],
@@ -230,7 +263,7 @@ export function newGame(
     points: 0,
     possessionsUsed: 0,
     charge: 0,
-    chips: 2,
+    chips: 2 + (opts.bonusChips ?? 0),
     challengeUsed: false,
     phase: 'personnel',
     won: false,
@@ -251,8 +284,9 @@ export function newGame(
     lastSnap: null,
     lastSnapInput: null,
     lastCall: null,
-    revealed: {},
+    revealed: Object.fromEntries((opts.intel ?? []).map((key) => [key, true])),
     ruleFireCounts: {},
+    groupTrim: opts.groupTrim ?? {},
     log: [],
     notice: null,
   }
@@ -454,9 +488,10 @@ export function callPlay(game: Game, cardId: number, rng: Rng): Game {
     possession: game.possessionsUsed + 1,
     ballOn: game.ballOn,
     protect,
-    mods: { juice, bonusBlockers: fresh ? 1 : 0 },
+    mods: { juice, bonusBlockers: fresh ? 1 : 0, vsMan: 0, vsZone: 0 },
     firedCounts: game.ruleFireCounts,
     lastPlayName: game.lastCall?.play ?? null,
+    groupTrim: game.groupTrim,
   }
   const outcome = resolveSnap({ opponent: opponentOf(game), ...input }, rng)
 
@@ -531,7 +566,7 @@ function endDrive(
     charge: 0,
   }
 
-  if (total >= RULES.target) return { ...base, phase: 'over', won: true }
+  if (total >= game.target) return { ...base, phase: 'over', won: true }
   if (possessionsUsed >= RULES.possessions) return { ...base, phase: 'over', won: false }
   return startDown(base, rng, true)
 }

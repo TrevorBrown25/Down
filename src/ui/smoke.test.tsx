@@ -6,6 +6,7 @@ import { Pregame } from './Pregame'
 import { Table } from './Table'
 import { Season } from './Season'
 import { Draft } from './Draft'
+import { EventWeek } from './EventWeek'
 import { RunOver } from './RunOver'
 
 /**
@@ -130,6 +131,13 @@ describe('a full season', () => {
         expect(() => renderToStaticMarkup(<RunOver run={run} />)).not.toThrow()
         break
       }
+      if (run.pendingEvent) {
+        seen.add('event')
+        expect(() => renderToStaticMarkup(<EventWeek run={run} />)).not.toThrow()
+        // Alternate the two options so both branches get exercised.
+        store().chooseEvent(run.at % 2 === 0 ? 0 : 1)
+        continue
+      }
       if (run.pending) {
         seen.add('draft')
         expect(() => renderToStaticMarkup(<Draft run={run} />)).not.toThrow()
@@ -161,6 +169,7 @@ describe('a full season', () => {
     const run = store().run
     if (!run) throw new Error('run vanished')
     expect(seen.has('season')).toBe(true)
+    expect(seen.has('event')).toBe(true)
     expect(seen.has('draft')).toBe(true)
     expect(seen.has('over')).toBe(true)
     expect(run.history.length).toBeGreaterThan(0)
@@ -184,6 +193,8 @@ describe('a full season', () => {
       }
     }
     store().finishWeek()
+    // The scenario comes first; the draft is on the other side of it.
+    if (store().run?.pendingEvent) store().chooseEvent(0)
     const offer = store().run?.pending
     if (!offer) throw new Error('expected a draft offer')
     store().draft(offer.cards[0].id)

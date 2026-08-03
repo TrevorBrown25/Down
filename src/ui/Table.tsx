@@ -1,6 +1,6 @@
 import { OFF_FORMATIONS, PERSONNEL, type Personnel } from '../game/cards'
 import { OPPONENTS } from '../game/opponents'
-import { RULES, legalPlays, type ChipAbility, type Game } from '../game/engine'
+import { legalPlays, type ChipAbility, type Game } from '../game/engine'
 import { useGame } from './store'
 import { Field } from './Field'
 import { DEFAULT_FORMATION } from './formations'
@@ -159,7 +159,7 @@ export function Table({ game }: { game: Game }) {
           {game.won ? 'WIN' : 'LOSS'}
         </div>
         <div className="font-display text-3xl text-chalk-dim">
-          {game.points} — {RULES.target}
+          {game.points} — {game.target}
         </div>
         <p className="max-w-md font-mono text-[11px] leading-relaxed text-chalk-faint">
           {game.won

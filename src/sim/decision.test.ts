@@ -52,6 +52,7 @@ function expectedValue(game: Game, card: PlayCard, salt: number): number {
         mods: NO_MODS,
         firedCounts: game.ruleFireCounts,
         lastPlayName: game.lastCall?.play ?? null,
+        groupTrim: game.groupTrim,
       },
       makeRng(salt * 7919 + i),
     )
@@ -235,6 +236,7 @@ function evWithTrials(game: Game, card: PlayCard, salt: number, trials: number):
         mods: NO_MODS,
         firedCounts: game.ruleFireCounts,
         lastPlayName: game.lastCall?.play ?? null,
+        groupTrim: game.groupTrim,
       },
       makeRng(salt * 7919 + i * 31),
     )
@@ -350,6 +352,7 @@ function evBlindPick(game: Game, legal: PlayCard[], salt: number): PlayCard {
           mods: NO_MODS,
           firedCounts: game.ruleFireCounts,
         lastPlayName: game.lastCall?.play ?? null,
+        groupTrim: game.groupTrim,
         },
         rng,
       )

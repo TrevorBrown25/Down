@@ -10,6 +10,7 @@ import {
   type OffFormationName,
   type OffPlayName,
 } from './cards'
+import { bonusFor, type GroupTrim } from './events'
 import type { Opponent, PreSnapState, SnapContext } from './opponents'
 import {
   applyDefAdj,
@@ -38,6 +39,8 @@ export type SnapInput = {
   firedCounts: Record<string, number>
   /** The previous call this game, or null on the first snap. */
   lastPlayName: OffPlayName | null
+  /** Blocker adjustments per personnel group, from practice weeks and knocks. */
+  groupTrim: GroupTrim
 }
 
 export type SnapOutcome = {
@@ -55,6 +58,16 @@ export type SnapOutcome = {
 export function resolveSnap(input: SnapInput, rng: Rng): SnapOutcome {
   const play = OFF_PLAYS[input.playName]
   const form = OFF_FORMATIONS[input.formName]
+
+  // Practice weeks and knocks ride in as snap modifiers, the same channel the
+  // chips use, so there is one place where a snap can be bent.
+  const bonus = bonusFor(input.groupTrim, form.pers)
+  const mods: SnapModifiers = {
+    ...input.mods,
+    bonusBlockers: input.mods.bonusBlockers + (bonus.block ?? 0),
+    vsMan: input.mods.vsMan + (bonus.man ?? 0),
+    vsZone: input.mods.vsZone + (bonus.zone ?? 0),
+  }
 
   const ctx: SnapContext = {
     formName: input.formName,
@@ -86,7 +99,7 @@ export function resolveSnap(input: SnapInput, rng: Rng): SnapOutcome {
     }
   }
 
-  let result = baseResolve(form, play, state.def, state.charge, input.mods, rng)
+  let result = baseResolve(form, play, state.def, state.charge, mods, rng)
   if (input.protect) result = applyProtection(result)
 
   for (const [key, rule] of rules) {

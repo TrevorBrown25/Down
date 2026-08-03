@@ -19,6 +19,7 @@ const BASE: SnapInput = {
   mods: NO_MODS,
   firedCounts: {},
   lastPlayName: null,
+  groupTrim: {},
 }
 
 /** Run the same snap across many seeds so probabilistic rules are covered. */

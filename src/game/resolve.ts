@@ -69,11 +69,15 @@ export function applyPA(cov: Coverage, charge: number): Coverage {
 export type SnapModifiers = {
   /** "Send It" — explosive chance tripled. */
   juice: boolean
-  /** "Fresh Legs" — one extra blocker. */
+  /** "Fresh Legs", or a blocking drill — one extra blocker. */
   bonusBlockers: number
+  /** A route-running drill. Only cashes when they are in man. */
+  vsMan: number
+  /** A film-study drill. Only cashes when they are in zone. */
+  vsZone: number
 }
 
-export const NO_MODS: SnapModifiers = { juice: false, bonusBlockers: 0 }
+export const NO_MODS: SnapModifiers = { juice: false, bonusBlockers: 0, vsMan: 0, vsZone: 0 }
 
 export function resolveRun(
   form: OffFormation,
@@ -150,7 +154,9 @@ export function resolvePass(
     return { yards: Math.round(-7 - rng() * 3), event: 'sack' }
   }
 
-  const matchup = def.cov.man ? play.vsMan : -play.vsMan
+  // Practice only cashes against the coverage it was aimed at: route detail is
+  // worth nothing against zone, and film study is worth nothing against man.
+  const matchup = def.cov.man ? play.vsMan + mods.vsMan : -play.vsMan + mods.vsZone
   // Which defenders are actually in position depends on how far the route runs.
   // Deep help never polices the quick game, and vice versa.
   const help =

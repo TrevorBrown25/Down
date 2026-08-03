@@ -157,16 +157,23 @@ export function Hand({
                 )}
               </div>
 
+              {/*
+                Anchored at top-full — flush with the card's bottom edge — so the
+                cursor never leaves the card's subtree on its way down. Any gap
+                here fires onMouseLeave, which unmounts this button mid-reach.
+              */}
               {lifted && playable && !game.tossUsed && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onToss(card.id)
-                  }}
-                  className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[9px] uppercase tracking-[0.18em] text-chalk-faint transition-colors hover:text-danger"
-                >
-                  toss
-                </button>
+                <div className="absolute left-0 top-full flex w-full justify-center pt-1.5">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onToss(card.id)
+                    }}
+                    className="whitespace-nowrap rounded-[2px] border border-hash bg-board-deep/90 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-chalk-faint transition-colors hover:border-danger/60 hover:text-danger"
+                  >
+                    toss
+                  </button>
+                </div>
               )}
             </motion.div>
           )

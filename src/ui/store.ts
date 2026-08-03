@@ -17,7 +17,10 @@ import {
   type Game,
 } from '../game/engine'
 import {
+  buyItem,
+  chooseEventOption,
   finishGame,
+  leaveShop,
   newRun,
   removeCard,
   skipDraft,
@@ -40,6 +43,9 @@ type Store = {
   startRun: (style: StyleName, seed?: number) => void
   kickoff: () => void
   finishWeek: () => void
+  chooseEvent: (index: 0 | 1) => void
+  buy: (index: number) => void
+  leaveShop: () => void
   draft: (cardId: number) => void
   passOnDraft: () => void
   cut: (cardId: number) => void
@@ -91,13 +97,17 @@ export const useGame = create<Store>((set, get) => {
       set({ game: startGame(run, rng) })
     },
 
-    // Bank the result and clear the field. The draft, if any, is now pending.
+    // Bank the result and clear the field. The week between games is now
+    // pending: the scenario first, then the draft it shapes.
     finishWeek: () => {
       const { run, game, rng } = get()
       if (!run || !game || game.phase !== 'over') return
       set({ run: finishGame(run, game, rng), game: null })
     },
 
+    chooseEvent: (index) => onRun((r, rng) => chooseEventOption(r, index, rng)),
+    buy: (index) => onRun((r) => buyItem(r, index)),
+    leaveShop: () => onRun((r, rng) => leaveShop(r, rng)),
     draft: (cardId) => onRun((r) => takeCard(r, cardId)),
     passOnDraft: () => onRun((r) => skipDraft(r)),
     cut: (cardId) => onRun((r) => removeCard(r, cardId)),

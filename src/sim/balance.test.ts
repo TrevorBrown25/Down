@@ -56,6 +56,12 @@ function print(label: string, m: Matrix) {
  * Real season completion is measured in `season.test.ts`, which plays whole
  * runs with drafting — the only number that means what it says.
  */
+/**
+ * Every cell here is played to the tier-1 points bar, so this measures one
+ * thing only: how much harder each opponent is than the last, holding the game
+ * itself fixed. The season stacks a per-tier bar on top (RULES.targets), so
+ * in-season win rates are lower than these — season.test.ts reports those.
+ */
 const TIER_WIN_RATE: Record<DeckName, [number, number, number]> = {
   'Ground & Pound': [0.66, 0.66, 0.41],
   'Air Raid': [0.54, 0.48, 0.27],
