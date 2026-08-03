@@ -1,6 +1,7 @@
 import { weighted, type Rng } from './rng'
 import {
   COVERAGES,
+  OFF_PLAYS,
   type CoverageName,
   type OffFormationName,
   type OffPlay,
@@ -21,6 +22,8 @@ export type SnapContext = {
   ballOn: number
   /** How many times each rule has already fired this game. */
   firedCounts: Record<string, number>
+  /** The previous call, so an opponent can react to what you keep doing. */
+  lastPlayName: OffPlayName | null
 }
 
 export type PreSnapState = { def: DefLook; charge: number }
@@ -45,6 +48,10 @@ export type CoveragePick = { down: number; toGo: number }
 
 export type Opponent = {
   name: string
+  /** 1 warm-up, 2 contender, 3 title shot. Drives how many rules they run. */
+  tier: 1 | 2 | 3
+  /** One line on the schedule board. */
+  blurb: string
   /** How they answer your declared personnel. */
   match: (pers: Personnel) => PackageName
   pickCoverage: (pool: readonly CoverageName[], ctx: CoveragePick, rng: Rng) => CoverageName
@@ -53,14 +60,14 @@ export type Opponent = {
 
 const evenly = (pool: readonly CoverageName[], rng: Rng) => weighted(pool, () => 1, rng)
 
-const DEEP_SHOTS: readonly OffPlayName[] = ['Deep Pass', 'Four Verticals']
-const INTERIOR_RUNS: readonly OffPlayName[] = ['Inside Run', 'Power O']
+const DEEP_SHOTS: readonly OffPlayName[] = ['Fade', 'Four Verticals']
+const INTERIOR_RUNS: readonly OffPlayName[] = ['Inside Zone', 'Power O', 'Trap']
 
-// NOTE: "Steel Curtain" is a Pittsburgh Steelers trademark. Rename before this
-// build goes anywhere public.
 export const OPPONENTS: Record<string, Opponent> = {
-  'Steel Curtain': {
-    name: 'Steel Curtain',
+  'The Foundry': {
+    name: 'The Foundry',
+    tier: 2,
+    blurb: 'Heavy front, man coverage, nobody home over the top.',
     match: () => 'Base',
     // Still tilted toward man and light deep help — that is who they are — but
     // Cover 1 Blitz lands ~33% of the time rather than 60%.
@@ -113,6 +120,8 @@ export const OPPONENTS: Record<string, Opponent> = {
 
   'The Shell': {
     name: 'The Shell',
+    tier: 2,
+    blurb: 'Two deep, bend but do not break.',
     match: (pers) => (pers === '21' ? 'Base' : pers === '12' ? 'Nickel' : 'Dime'),
     pickCoverage: (pool, _ctx, rng) =>
       weighted(pool, (c) => (COVERAGES[c].deepHelp >= 2 ? 3 : 0.8), rng),
@@ -155,6 +164,8 @@ export const OPPONENTS: Record<string, Opponent> = {
 
   'The Gamblers': {
     name: 'The Gamblers',
+    tier: 2,
+    blurb: 'They would rather guess wrong than sit still.',
     match: () => 'Nickel',
     pickCoverage: (pool, ctx, rng) => {
       if (ctx.down === 3 && pool.includes('Cover 1 Blitz')) return 'Cover 1 Blitz'
@@ -178,10 +189,10 @@ export const OPPONENTS: Record<string, Opponent> = {
       },
       quickEats: {
         name: 'Quick Game Eats It',
-        text: 'A quick pass against their blitz always completes for 8+.',
+        text: 'A Slant against their blitz always completes for 8+.',
         visible: false,
         postSnap: (ctx, result, def, rng) => {
-          if (ctx.playName !== 'Quick Pass' || def.cov.rush < 6) return null
+          if (ctx.playName !== 'Slant' || def.cov.rush < 6) return null
           const beaten =
             result.yards < 8 || result.event === 'sack' || result.event === 'incomplete'
           if (!beaten) return result
@@ -190,6 +201,281 @@ export const OPPONENTS: Record<string, Opponent> = {
       },
     },
   },
+
+  /* ------------------------------- tier 1 -------------------------------- */
+
+  'The Sandlot': {
+    name: 'The Sandlot',
+    tier: 1,
+    blurb: 'Talented, undisciplined, and a step slow off the edge.',
+    match: () => 'Base',
+    pickCoverage: (pool, _ctx, rng) => evenly(pool, rng),
+    rules: {
+      edges: {
+        name: 'Slow Off The Edge',
+        text: 'Outside Zone always gains at least 5.',
+        visible: true,
+        postSnap: (ctx, result) => {
+          if (ctx.playName !== 'Outside Zone' || result.turnover) return null
+          if (result.yards >= 5) return null
+          return { yards: 5, event: 'run' }
+        },
+      },
+      drills: {
+        name: 'They Wake Up',
+        text: 'After two explosive plays they stop giving them up — nothing over 12.',
+        visible: false,
+        postSnap: (ctx, result) => {
+          if (result.event !== 'breakaway' && result.event !== 'big play') return null
+          // The first two are free. After that the window is shut.
+          if ((ctx.firedCounts.drills ?? 0) < 2) return result
+          return { ...result, yards: Math.min(result.yards, 12) }
+        },
+      },
+    },
+  },
+
+  'The Rotation': {
+    name: 'The Rotation',
+    tier: 1,
+    blurb: 'Deep roster, fresh legs early, nothing left by the fourth.',
+    match: (pers) => (pers === '11' ? 'Nickel' : 'Base'),
+    pickCoverage: (pool, _ctx, rng) => evenly(pool, rng),
+    rules: {
+      fresh: {
+        name: 'Fresh Bodies',
+        text: 'For the first two possessions their box is one heavier.',
+        visible: true,
+        preSnap: (ctx, state) => {
+          if (ctx.possession > 2) return null
+          return {
+            ...state,
+            def: { ...state.def, form: { ...state.def.form, box: state.def.form.box + 1 } },
+          }
+        },
+      },
+      wears: {
+        name: 'Nothing Left',
+        text: 'From possession 3 their box drops by two and the coverage sags.',
+        visible: false,
+        preSnap: (ctx, state) => {
+          if (ctx.possession < 3) return null
+          return {
+            ...state,
+            def: {
+              form: { ...state.def.form, box: state.def.form.box - 2 },
+              cov: { ...state.def.cov, underneath: state.def.cov.underneath - 1 },
+            },
+          }
+        },
+      },
+    },
+  },
+
+  'The Overload': {
+    name: 'The Overload',
+    tier: 1,
+    blurb: 'They send an extra rusher until it stops working.',
+    match: () => 'Nickel',
+    pickCoverage: (pool, _ctx, rng) =>
+      weighted(pool, (c) => (COVERAGES[c].rush >= 6 ? 1.6 : 1), rng),
+    rules: {
+      heat: {
+        name: 'Extra Rusher',
+        text: 'One more man comes than the protection accounts for.',
+        visible: true,
+        preSnap: (ctx, state) => {
+          if (ctx.play.kind !== 'pass') return null
+          // Once you have made them pay twice, they stop bringing it.
+          if ((ctx.firedCounts.settle ?? 0) >= 2) return null
+          // Never stacked on top of a coverage that already brings six.
+          if (state.def.cov.rush >= 6) return null
+          return {
+            ...state,
+            def: { ...state.def, cov: { ...state.def.cov, rush: state.def.cov.rush + 1 } },
+          }
+        },
+      },
+      settle: {
+        name: 'They Settle Down',
+        text: 'Beat the pressure twice for 10+ and the extra rusher stays home.',
+        visible: false,
+        postSnap: (ctx, result) => {
+          if (ctx.play.kind !== 'pass' || result.turnover) return null
+          if (result.yards < 10) return null
+          return result
+        },
+      },
+    },
+  },
+
+  /* ------------------------------- tier 3 -------------------------------- */
+
+  'The Mirror': {
+    name: 'The Mirror',
+    tier: 3,
+    blurb: 'They have seen the film. Repeat yourself and they are waiting.',
+    match: (pers) => (pers === '21' ? 'Base' : pers === '12' ? 'Nickel' : 'Dime'),
+    pickCoverage: (pool, _ctx, rng) =>
+      weighted(pool, (c) => (COVERAGES[c].man ? 3 : 1), rng),
+    rules: {
+      filmStudy: {
+        name: 'Film Study',
+        text: 'Call the same play twice in a row and it gains 3 at most.',
+        visible: true,
+        postSnap: (ctx, result) => {
+          if (ctx.lastPlayName !== ctx.playName || result.turnover) return null
+          if (result.yards <= 3) return null
+          return { ...result, yards: 3 }
+        },
+      },
+      sticky: {
+        name: 'Sticky',
+        text: 'Their man coverage travels — quick passes lose their cushion.',
+        visible: false,
+        postSnap: (ctx, result, def) => {
+          if (ctx.playName !== 'Slant' || !def.cov.man || result.turnover) return null
+          if (result.yards <= 3) return null
+          return { ...result, yards: Math.max(3, result.yards - 2) }
+        },
+      },
+      adjusts: {
+        name: 'They Adjust',
+        text: 'The third time a deep shot connects, they take it away for good.',
+        visible: false,
+        postSnap: (ctx, result) => {
+          if (!DEEP_SHOTS.includes(ctx.playName) || result.turnover) return null
+          // Only a shot that actually connected teaches them anything.
+          if (result.yards < 15) return null
+          if ((ctx.firedCounts.adjusts ?? 0) < 2) return result
+          return { ...result, yards: 12, event: 'complete' }
+        },
+      },
+      noQuit: {
+        name: 'No Quit',
+        text: 'Inside their 20 the box gets two heavier.',
+        visible: false,
+        preSnap: (ctx, state) => {
+          if (ctx.ballOn < 80) return null
+          return {
+            ...state,
+            def: { ...state.def, form: { ...state.def.form, box: state.def.form.box + 2 } },
+          }
+        },
+      },
+    },
+  },
+
+  'The Vice': {
+    name: 'The Vice',
+    tier: 3,
+    blurb: 'Every drive another body walks into the box. Throw it or die.',
+    match: () => 'Base',
+    pickCoverage: (pool, _ctx, rng) =>
+      weighted(pool, (c) => (COVERAGES[c].boxSupport >= 1 ? 2 : 1), rng),
+    rules: {
+      squeeze: {
+        name: 'The Squeeze',
+        text: 'The box gets one heavier for every possession you have used.',
+        visible: true,
+        // The counterweight to a tier-3 roster that otherwise only punishes the
+        // pass: against these, throwing it is the answer.
+        preSnap: (ctx, state) => {
+          const grip = Math.min(2, ctx.possession - 1)
+          if (grip <= 0) return null
+          return {
+            ...state,
+            def: { ...state.def, form: { ...state.def.form, box: state.def.form.box + grip } },
+          }
+        },
+      },
+      earlyGift: {
+        name: 'Slow Starters',
+        text: 'On your first possession they are a step behind: no stuffs, no sacks.',
+        visible: false,
+        postSnap: (ctx, result) => {
+          if (ctx.possession > 1) return null
+          if (result.event === 'stuffed') return { yards: 2, event: 'run' }
+          if (result.event === 'sack') return { yards: 0, event: 'incomplete' }
+          return null
+        },
+      },
+      clamp: {
+        name: 'Clamp',
+        text: 'Nothing gains more than 28.',
+        visible: false,
+        postSnap: (_ctx, result) => {
+          if (result.yards <= 28) return null
+          return { ...result, yards: 28 }
+        },
+      },
+      lastStand: {
+        name: 'Last Stand',
+        text: 'On your final possession, 3rd-down runs gain 1 at most.',
+        visible: false,
+        postSnap: (ctx, result) => {
+          if (ctx.possession < 5 || ctx.down !== 3 || ctx.play.kind !== 'run') return null
+          if (result.turnover || result.yards <= 1) return null
+          return { yards: 1, event: 'run' }
+        },
+      },
+    },
+  },
+
+  'The Closer': {
+    name: 'The Closer',
+    tier: 3,
+    blurb: 'They give you the first quarter and take the rest.',
+    match: (pers) => (pers === '11' ? 'Dime' : 'Base'),
+    pickCoverage: (pool, ctx, rng) => {
+      if (ctx.down >= 3 && pool.includes('Cover 1 Blitz')) return 'Cover 1 Blitz'
+      return weighted(pool, (c) => (COVERAGES[c].man ? 2 : 1), rng)
+    },
+    rules: {
+      lateBlitz: {
+        name: 'Money Down',
+        text: 'They blitz every third and fourth down.',
+        visible: true,
+      },
+      gift: {
+        name: 'Opening Script',
+        text: 'Your first possession is free — the box is two lighter.',
+        visible: false,
+        preSnap: (ctx, state) => {
+          if (ctx.possession > 1) return null
+          return {
+            ...state,
+            def: { ...state.def, form: { ...state.def.form, box: state.def.form.box - 2 } },
+          }
+        },
+      },
+      shutTheDoor: {
+        name: 'Shut The Door',
+        text: 'From possession 3 on, deep balls are capped at 10.',
+        visible: false,
+        postSnap: (ctx, result) => {
+          if (ctx.possession < 3 || !DEEP_SHOTS.includes(ctx.playName)) return null
+          if (result.yards <= 10) return null
+          return { ...result, yards: 10, event: 'complete' }
+        },
+      },
+      punish: {
+        name: 'Punish The Predictable',
+        text: 'Run it on 1st down twice in a row and the second one is stuffed.',
+        visible: false,
+        postSnap: (ctx, result) => {
+          if (ctx.down !== 1 || ctx.play.kind !== 'run' || result.turnover) return null
+          if (!ctx.lastPlayName || OFF_PLAYS[ctx.lastPlayName].kind !== 'run') return null
+          if (result.yards <= 0) return null
+          return { yards: -1, event: 'stuffed' }
+        },
+      },
+    },
+  },
 }
 
 export const OPPONENT_NAMES = Object.keys(OPPONENTS)
+
+/** Everyone who belongs in a given week of the schedule. */
+export const opponentsByTier = (tier: number): string[] =>
+  OPPONENT_NAMES.filter((n) => OPPONENTS[n].tier === tier)

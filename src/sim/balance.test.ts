@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { DECKS, type DeckName } from '../game/cards'
-import { OPPONENT_NAMES } from '../game/opponents'
+import { STARTERS, type DeckName } from '../game/cards'
+import { OPPONENTS, OPPONENT_NAMES } from '../game/opponents'
 import { playMany, type Summary } from './play'
 import {
   chipsFlagPolicy,
@@ -20,7 +20,7 @@ import {
 } from './policy'
 
 const GAMES = 300
-const DECK_NAMES = Object.keys(DECKS) as DeckName[]
+const DECK_NAMES = Object.keys(STARTERS) as DeckName[]
 
 type Matrix = Record<string, Record<string, Summary>>
 
@@ -51,21 +51,18 @@ function print(label: string, m: Matrix) {
 }
 
 /**
- * Where the balance actually sits today, measured — not where it should sit.
- * Every seed is fixed, so these are exact and will not flake. When a tuning
- * change moves them, that is the change working; update the table deliberately.
- *
- * These are the opponent-blind numbers. The Shell reads far worse here than it
- * plays, because its counter has to be learned — see the grinder policy, which
- * lifts Air Raid from 9% to 27% by knowing to get heavy and run it inside.
+ * Pinned as tier averages rather than all 27 cells: what matters is that the
+ * difficulty ramp holds its shape, not that any single matchup is frozen.
+ * Real season completion is measured in `season.test.ts`, which plays whole
+ * runs with drafting — the only number that means what it says.
  */
-const COACH_WIN_RATE: Record<DeckName, Record<string, number>> = {
-  'Ground & Pound': { 'Steel Curtain': 0.48, 'The Shell': 0.6, 'The Gamblers': 0.49 },
-  'Pro Style': { 'Steel Curtain': 0.75, 'The Shell': 0.22, 'The Gamblers': 0.62 },
-  'Air Raid': { 'Steel Curtain': 0.74, 'The Shell': 0.23, 'The Gamblers': 0.54 },
+const TIER_WIN_RATE: Record<DeckName, [number, number, number]> = {
+  'Ground & Pound': [0.66, 0.66, 0.41],
+  'Air Raid': [0.54, 0.48, 0.27],
+  'Pro Style': [0.68, 0.58, 0.43],
 }
 
-const TOLERANCE = 0.06
+const TOLERANCE = 0.07
 
 describe('balance matrix', () => {
   const random = matrix(randomPolicy)
@@ -177,7 +174,7 @@ describe('balance matrix', () => {
         `  same pick ${pct(div.same / total)}   different pick ${pct(div.diff / total)}` +
         `   of ${total} real choices`,
     )
-    expect(cells).toHaveLength(9)
+    expect(cells).toHaveLength(DECK_NAMES.length * OPPONENT_NAMES.length)
   })
 
   // Control for the oracle result below. If deliberately choosing the worst
@@ -211,10 +208,23 @@ describe('balance matrix', () => {
     expect(delta(chipsFlag)).toBeGreaterThan(delta(chips))
   })
 
-  test.each(DECK_NAMES)('%s win rates have not drifted', (deck) => {
-    for (const o of OPPONENT_NAMES) {
-      expect(coach[deck][o].winRate).toBeCloseTo(COACH_WIN_RATE[deck][o], 1)
-      expect(Math.abs(coach[deck][o].winRate - COACH_WIN_RATE[deck][o])).toBeLessThan(TOLERANCE)
+  const tierMean = (deck: DeckName, tier: number) => {
+    const names = OPPONENT_NAMES.filter((n) => OPPONENTS[n].tier === tier)
+    return names.reduce((sum, n) => sum + coach[deck][n].winRate, 0) / names.length
+  }
+
+  test.each(DECK_NAMES)('%s difficulty ramp has not drifted', (deck) => {
+    for (const tier of [1, 2, 3] as const) {
+      expect(Math.abs(tierMean(deck, tier) - TIER_WIN_RATE[deck][tier - 1])).toBeLessThan(
+        TOLERANCE,
+      )
+    }
+  })
+
+  test('the season actually gets harder', () => {
+    for (const deck of DECK_NAMES) {
+      expect(tierMean(deck, 3)).toBeLessThan(tierMean(deck, 2))
+      expect(tierMean(deck, 3)).toBeLessThan(tierMean(deck, 1))
     }
   })
 

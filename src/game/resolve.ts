@@ -88,7 +88,18 @@ export function resolveRun(
   const risk = play.width === 1 ? 1.6 : 1.0
   const canStuff = !(play.noStuffLight && def.form.box <= 6)
 
-  if (canStuff && rng() < clamp((0.12 - boxAdv * 0.06) * risk, 0.02, 0.6)) {
+  // Does the look suit the play? Misdirection wants a crowded, over-pursuing
+  // front; a numbers play wants them light. Positive means it fits.
+  const crowd = commitment - 6.5
+  const fit = play.vsBox * crowd
+
+  // A sneak is a yard. That is the whole card.
+  if (play.sneak) {
+    if (rng() < 0.004) return { yards: 0, event: 'fumble', turnover: true }
+    return { yards: boxAdv > 0 ? 2 : 1, event: 'run' }
+  }
+
+  if (canStuff && rng() < clamp((0.12 - boxAdv * 0.06 - fit * 0.03) * risk, 0.02, 0.6)) {
     return { yards: Math.round(-2 - rng() * 2), event: 'stuffed' }
   }
   if (rng() < 0.007) return { yards: 0, event: 'fumble', turnover: true }
@@ -107,7 +118,7 @@ export function resolveRun(
 
   const edge = play.width === 1 ? 7 - def.form.box : 0
   return {
-    yards: Math.max(1, Math.round(play.base + boxAdv * 1.5 + edge)),
+    yards: Math.max(1, Math.round(play.base + boxAdv * 1.5 + edge + fit * 1.6)),
     event: 'run',
   }
 }
@@ -122,7 +133,20 @@ export function resolvePass(
   const blockers = form.blockers + mods.bonusBlockers
   const heat = def.cov.rush + def.form.rushBonus - blockers + play.time
 
-  if (rng() < clamp(0.05 + (heat - 2) * 0.16, 0.02, 0.75)) {
+  // A screen wants the rush. Everyone who came upfield is now blocked out of
+  // the play, so the pressure that would have been a sack is the gain instead.
+  if (play.screen) {
+    if (rng() < 0.03) return { yards: 0, event: 'incomplete' }
+    const sprung = Math.max(0, heat) * 2.6
+    if (rng() < 0.06 + Math.max(0, heat) * 0.03) {
+      return { yards: Math.round(play.base + sprung + 14 + rng() * 20), event: 'big play' }
+    }
+    return { yards: Math.max(1, Math.round(play.base + sprung)), event: 'complete' }
+  }
+
+  // Moving the pocket takes most of the rush out of the play.
+  const pressure = play.bootleg ? heat - 3 : heat
+  if (rng() < clamp(0.05 + (pressure - 2) * 0.16, 0.02, 0.75)) {
     return { yards: Math.round(-7 - rng() * 3), event: 'sack' }
   }
 

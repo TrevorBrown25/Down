@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { DECKS, type DeckName } from '../game/cards'
+import { STARTERS, type DeckName } from '../game/cards'
 import { OPPONENT_NAMES } from '../game/opponents'
 import { RULES } from '../game/engine'
 import { playGame } from './play'
@@ -11,7 +11,7 @@ import {
   veteranPolicy,
 } from './policy'
 
-const DECK_NAMES = Object.keys(DECKS) as DeckName[]
+const DECK_NAMES = Object.keys(STARTERS) as DeckName[]
 const MATCHUPS = DECK_NAMES.flatMap((d) => OPPONENT_NAMES.map((o) => [d, o] as const))
 
 describe('playGame', () => {
@@ -45,7 +45,7 @@ describe('playGame', () => {
     const points = new Set(
       Array.from({ length: 50 }, (_, i) =>
         playGame(
-          { seed: i + 1, archetype: 'Ground & Pound', opponentName: 'Steel Curtain' },
+          { seed: i + 1, archetype: 'Ground & Pound', opponentName: 'The Foundry' },
           coachPolicy,
         ).points,
       ),

@@ -1,4 +1,4 @@
-import type { DefFormationName, OffFormationName } from '../game/cards'
+import type { DefFormationName, OffFormationName, Personnel } from '../game/cards'
 
 /**
  * Chalkboard coordinates in a 800x420 viewBox. The line of scrimmage sits at
@@ -112,7 +112,17 @@ export const DEFENSE: Record<DefFormationName, Man[]> = {
   ],
 }
 
-/** Shown before the snap, when only the personnel group has been declared. */
+/**
+ * Once personnel is declared both teams are lined up, so the board shows a
+ * representative formation for the group rather than leaving you in the huddle.
+ */
+export const DEFAULT_FORMATION: Record<Personnel, OffFormationName> = {
+  '21': 'I-Form',
+  '12': 'Singleback',
+  '11': 'Gun 11',
+}
+
+/** Shown before anything is declared. */
 export const HUDDLE: Man[] = [
   { pos: '', x: 360, y: 320 },
   { pos: '', x: 400, y: 306 },

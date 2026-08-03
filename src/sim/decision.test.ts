@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import { makeRng } from '../game/rng'
-import { DECKS, OFF_PLAYS, PACKAGES, type DeckName, type PlayCard } from '../game/cards'
-import { OPPONENTS, OPPONENT_NAMES } from '../game/opponents'
+import { STARTERS, OFF_PLAYS, PACKAGES, type DeckName, type PlayCard } from '../game/cards'
+import { OPPONENTS } from '../game/opponents'
+
+/** These sweeps resolve thousands of snaps per option, so they run a slice of
+ * the roster rather than all of it — one opponent from each tier. */
+const OPPONENT_NAMES = ['The Sandlot', 'The Foundry', 'The Mirror']
 import { NO_MODS } from '../game/resolve'
 import { resolveSnap } from '../game/snap'
 import {
@@ -47,6 +51,7 @@ function expectedValue(game: Game, card: PlayCard, salt: number): number {
         protect: false,
         mods: NO_MODS,
         firedCounts: game.ruleFireCounts,
+        lastPlayName: game.lastCall?.play ?? null,
       },
       makeRng(salt * 7919 + i),
     )
@@ -127,7 +132,7 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1)
 const fmt = (n: number) => n.toFixed(2).padStart(6)
 
 describe('how much the play call matters', () => {
-  const DECK_NAMES = Object.keys(DECKS) as DeckName[]
+  const DECK_NAMES = Object.keys(STARTERS) as DeckName[]
 
   test('measures the real headroom above the situational heuristic', () => {
     const all: Sample[] = []
@@ -229,6 +234,7 @@ function evWithTrials(game: Game, card: PlayCard, salt: number, trials: number):
         protect: false,
         mods: NO_MODS,
         firedCounts: game.ruleFireCounts,
+        lastPlayName: game.lastCall?.play ?? null,
       },
       makeRng(salt * 7919 + i * 31),
     )
@@ -280,7 +286,7 @@ function winRate(archetype: DeckName, opponentName: string, games: number, evMax
 
 describe('does the headroom convert into wins', () => {
   test('an EV-maximising caller versus the situational heuristic', () => {
-    const DECK_NAMES = Object.keys(DECKS) as DeckName[]
+    const DECK_NAMES = Object.keys(STARTERS) as DeckName[]
     const GAMES = 60
     const rows: string[] = []
     let deltaSum = 0
@@ -343,6 +349,7 @@ function evBlindPick(game: Game, legal: PlayCard[], salt: number): PlayCard {
           protect: false,
           mods: NO_MODS,
           firedCounts: game.ruleFireCounts,
+        lastPlayName: game.lastCall?.play ?? null,
         },
         rng,
       )
@@ -402,7 +409,7 @@ function winRateWith(
 
 describe('what a coverage read is worth to a perfect caller', () => {
   test('EV-max knowing the coverage versus EV-max blind to it', () => {
-    const DECK_NAMES = Object.keys(DECKS) as DeckName[]
+    const DECK_NAMES = Object.keys(STARTERS) as DeckName[]
     const GAMES = 80
     const rows: string[] = []
     let sum = 0

@@ -6,7 +6,7 @@ const ORDINAL = ['1ST', '2ND', '3RD', '4TH']
 
 export function Scoreboard({ game }: { game: Game }) {
   return (
-    <div className="tape flex items-stretch justify-between gap-6 rounded-sm px-5 py-3">
+    <div className="tape flex items-stretch justify-between gap-6 rounded-sm px-5 py-2">
       <div className="flex items-baseline gap-3">
         <span className="font-display text-5xl leading-none text-chalk">{game.points}</span>
         <span className="font-mono text-xs text-chalk-faint">/ {RULES.target}</span>

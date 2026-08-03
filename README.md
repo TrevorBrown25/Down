@@ -81,6 +81,9 @@ Measured, not guessed — run `npm run sim`. Nine policies play every matchup:
 | `anti-oracle` | perfect knowledge used to pick the *worst* play — the control |
 | `veteran` | chips, reads and the flag together |
 
+`src/sim/season.test.ts` plays **whole seasons** with drafting, which is the only
+number that means what it says: a chip-spending player completes **32%** of them.
+
 Policies are ablations. Each one changes exactly one thing against the `coach`
 baseline, so the delta is the value of that mechanic. `anti-oracle` exists so a
 null result can be trusted: if choosing badly with perfect information were not
@@ -121,21 +124,52 @@ coverage rather than only the package is worth **+8.2pp** — see
   coverage read from worthless to **+8.2pp**, and dragged The Shell up from 6–7%
   to 22–23% against passing decks as a side effect.
 
+### The roster
+
+Nine opponents across three tiers. A season draws two tier-1 weeks, three tier-2
+and three tier-3, without replacement, so you rarely face the same team twice.
+
+| tier | weeks | rules each | teams |
+| --- | --- | --- | --- |
+| 1 warm-up | 1-2 | 2 | The Sandlot · The Rotation · The Overload |
+| 2 contender | 3-5 | 3 | The Foundry · The Shell · The Gamblers |
+| 3 title shot | 6-8 | 4 | The Mirror · The Vice · The Closer |
+
+Every new opponent carries at least one rule that **changes state mid-game** —
+they wear down, they wake up, they adjust to what you keep calling — rather than
+being a flat gift or tax. `SnapContext` now carries `lastPlayName`, so a rule can
+react to what you called on the previous snap.
+
+Difficulty is pinned as **tier averages**, not as 27 individual cells: what
+matters is that the ramp holds its shape.
+
 ### Open
 
-1. **Reads are priced at exactly break-even.** Knowing the coverage is now worth
+1. **Drafting currently makes you worse.** Measured over whole seasons: taking a
+   card after every game moves Ground & Pound 16% → 19%, Pro Style 26% → 24%, and
+   Air Raid 7% → **4%**. The placeholder draft pool offers existing plays in
+   formations you lack, and diluting a lean 16-card deck to 21 costs more
+   consistency than those cards add. Authoring real play types is now the most
+   valuable content work available, and it has a measurable target: drafting
+   should be clearly positive.
+
+2. **Reads are priced at exactly break-even.** Knowing the coverage is now worth
    **+5pp**, but buying that knowledge with a Motion or a Hot Read nets **0pp** —
    the card it costs is worth about what the read gains. That is a defensible
    price rather than a dead card, and it varies by matchup (best +7pp, worst
    −8pp), so it is a real decision. Whether it should be slightly *profitable*
    is a design call. The same is true of the Audible at +2pp.
 
-2. **Ground & Pound now beats The Shell 60% of the time**, which makes it the
-   softest matchup on the board. The coverage rework lifted the whole column and
-   overshot for the heavy deck.
+2. **Air Raid is stuck at 15% against The Shell.** Every other style/opponent
+   pair now sits between 41% and 84%; this one cell is the outlier, and it is
+   what holds Air Raid's season completion down to 24% while the other two clear
+   40%. The counter to a two-deep shell is to get heavy and pound it, and Air
+   Raid is the one deck built not to.
 3. **Rules are still mostly one-way valves.** Each is a pure gift or a pure tax
    rather than a decision. `Gasses Out` and the new `No Deep Help` expiry are the
    only two that change state mid-game, and they are the most interesting rules
    in the build.
-4. **"Steel Curtain" is a Pittsburgh Steelers trademark.** Rename before this is
-   public.
+4. **Air Raid completes only 21% of seasons** against 39% and 37% for the other
+   two, almost all of it the 15% against The Shell. That matchup is correct by
+   design — a pass-first team should lose to a two-deep shell — but with only two
+   losses allowed, one conceded cell is expensive.

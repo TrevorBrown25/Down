@@ -36,6 +36,8 @@ export type SnapInput = {
   mods: SnapModifiers
   /** How many times each opponent rule has fired so far this game. */
   firedCounts: Record<string, number>
+  /** The previous call this game, or null on the first snap. */
+  lastPlayName: OffPlayName | null
 }
 
 export type SnapOutcome = {
@@ -62,6 +64,7 @@ export function resolveSnap(input: SnapInput, rng: Rng): SnapOutcome {
     possession: input.possession,
     ballOn: input.ballOn,
     firedCounts: input.firedCounts,
+    lastPlayName: input.lastPlayName,
   }
 
   let state: PreSnapState = {

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { makeRng, type Rng } from '../game/rng'
-import type { DeckName, Personnel } from '../game/cards'
+import type { Personnel, StyleName } from '../game/cards'
 import {
   armChip,
   callPlay,
@@ -8,7 +8,6 @@ import {
   declarePersonnel,
   fieldGoal,
   hurryUp,
-  newGame,
   nextDown,
   playAudible,
   playInfoCard,
@@ -17,17 +16,36 @@ import {
   type ChipAbility,
   type Game,
 } from '../game/engine'
+import {
+  finishGame,
+  newRun,
+  removeCard,
+  skipDraft,
+  startGame,
+  takeCard,
+  type Run,
+} from '../game/run'
 
 /**
- * A thin shell over the engine. Every rule lives in `src/game`; this only holds
- * the current state and the run's RNG, which is mutable and deliberately not
- * part of the rendered state.
+ * A thin shell over the engine and the run. Every rule lives in `src/game`;
+ * this holds the current state and the run's RNG, which is mutable and
+ * deliberately not part of the rendered state.
  */
 type Store = {
+  run: Run | null
   game: Game | null
-  seed: number
   rng: Rng
-  start: (archetype: DeckName, opponentName: string, seed?: number) => void
+
+  /* run */
+  startRun: (style: StyleName, seed?: number) => void
+  kickoff: () => void
+  finishWeek: () => void
+  draft: (cardId: number) => void
+  passOnDraft: () => void
+  cut: (cardId: number) => void
+  abandon: () => void
+
+  /* game */
   declare: (pers: Personnel) => void
   call: (cardId: number) => void
   advance: () => void
@@ -39,28 +57,51 @@ type Store = {
   flag: () => void
   kick: () => void
   punt: () => void
-  quit: () => void
 }
 
 const randomSeed = () => Math.floor(Math.random() * 1_000_000) + 1
 
 export const useGame = create<Store>((set, get) => {
-  /** Apply an engine transition, ignoring it when there is no game. */
+  /** Apply an engine transition to the live game. */
   const step = (fn: (game: Game, rng: Rng) => Game) => {
     const { game, rng } = get()
     if (!game) return
     set({ game: fn(game, rng) })
   }
 
+  /** Apply a transition to the run. */
+  const onRun = (fn: (run: Run, rng: Rng) => Run) => {
+    const { run, rng } = get()
+    if (!run) return
+    set({ run: fn(run, rng) })
+  }
+
   return {
+    run: null,
     game: null,
-    seed: 0,
     rng: makeRng(1),
 
-    start: (archetype, opponentName, seed = randomSeed()) => {
-      const rng = makeRng(seed)
-      set({ seed, rng, game: newGame({ seed, archetype, opponentName }, rng) })
+    startRun: (style, seed = randomSeed()) => {
+      set({ rng: makeRng(seed), run: newRun(style, seed), game: null })
     },
+
+    kickoff: () => {
+      const { run, rng } = get()
+      if (!run || run.status !== 'playing') return
+      set({ game: startGame(run, rng) })
+    },
+
+    // Bank the result and clear the field. The draft, if any, is now pending.
+    finishWeek: () => {
+      const { run, game, rng } = get()
+      if (!run || !game || game.phase !== 'over') return
+      set({ run: finishGame(run, game, rng), game: null })
+    },
+
+    draft: (cardId) => onRun((r) => takeCard(r, cardId)),
+    passOnDraft: () => onRun((r) => skipDraft(r)),
+    cut: (cardId) => onRun((r) => removeCard(r, cardId)),
+    abandon: () => set({ run: null, game: null }),
 
     declare: (pers) => step((g, rng) => declarePersonnel(g, pers, rng)),
     call: (cardId) => step((g, rng) => callPlay(g, cardId, rng)),
@@ -73,6 +114,5 @@ export const useGame = create<Store>((set, get) => {
     flag: () => step((g, rng) => challenge(g, rng)),
     kick: () => step((g, rng) => fieldGoal(g, rng)),
     punt: () => step((g, rng) => punt(g, rng)),
-    quit: () => set({ game: null }),
   }
 })

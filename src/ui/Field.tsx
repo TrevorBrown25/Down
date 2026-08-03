@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from 'motion/react'
 import type { DefFormationName, OffFormationName } from '../game/cards'
 import { DEFENSE, HUDDLE, LOS, OFFENSE, type Man } from './formations'
 
@@ -11,18 +10,24 @@ type Props = {
   toGo: number
 }
 
-const SPRING = { type: 'spring', stiffness: 210, damping: 22, mass: 0.7 } as const
+/**
+ * Positions move with CSS transitions, not Motion. The board is the centrepiece
+ * and it has to be right every time — a transform transition is declarative,
+ * cannot stall halfway, and gives the same overshoot for free.
+ */
+const SHIFT = 'transform 620ms cubic-bezier(.34, 1.4, .4, 1)'
+
+const spot = (m: Man, i: number) => ({
+  transform: `translate(${m.x}px, ${m.y}px)`,
+  transition: SHIFT,
+  transitionDelay: `${i * 20}ms`,
+})
 
 function Offense({ men }: { men: Man[] }) {
   return (
     <>
       {men.map((m, i) => (
-        <motion.g
-          key={`o${i}`}
-          initial={{ x: 400, y: 340, opacity: 0 }}
-          animate={{ x: m.x, y: m.y, opacity: 1 }}
-          transition={{ ...SPRING, delay: i * 0.018 }}
-        >
+        <g key={`o${i}`} style={spot(m, i)}>
           <circle
             r="12"
             fill="none"
@@ -42,7 +47,7 @@ function Offense({ men }: { men: Man[] }) {
           >
             {m.pos}
           </text>
-        </motion.g>
+        </g>
       ))}
     </>
   )
@@ -52,12 +57,7 @@ function Defense({ men }: { men: Man[] }) {
   return (
     <>
       {men.map((m, i) => (
-        <motion.g
-          key={`d${i}`}
-          initial={{ x: m.x, y: 40, opacity: 0 }}
-          animate={{ x: m.x, y: m.y, opacity: 1 }}
-          transition={{ ...SPRING, delay: i * 0.022 }}
-        >
+        <g key={`d${i}`} style={spot(m, i)}>
           {/* Defense is drawn as X's — the actual chalkboard convention. */}
           <path
             d="M -8 -8 L 8 8 M 8 -8 L -8 8"
@@ -77,7 +77,7 @@ function Defense({ men }: { men: Man[] }) {
           >
             {m.pos}
           </text>
-        </motion.g>
+        </g>
       ))}
     </>
   )
@@ -92,7 +92,11 @@ export function Field({ formation, defFormation, result, ballOn, toGo }: Props) 
 
   return (
     <div className="chalkboard chalk-smear relative overflow-hidden rounded-sm border border-hash/60 shadow-[inset_0_0_60px_rgba(0,0,0,0.45)]">
-      <svg viewBox="0 0 800 420" className="block w-full">
+      <svg
+        viewBox="0 0 800 420"
+        className="block w-full"
+        style={{ height: 'min(40vh, 320px)' }}
+      >
         {/* yard lines */}
         {[60, 110, 160, 210, 310, 360, 410].map((y) => (
           <line
@@ -158,40 +162,33 @@ export function Field({ formation, defFormation, result, ballOn, toGo }: Props) 
         ball on the {ballOn <= 50 ? `own ${ballOn}` : `opp ${100 - ballOn}`}
       </div>
 
-      <AnimatePresence>
-        {result && (
-          <motion.div
-            key={`${result.event}-${result.yards}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-board-edge/45"
+      {result && (
+        <div
+          key={`${result.event}-${result.yards}`}
+          className="reveal pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-board-edge/70"
+        >
+          <div
+            className="font-display text-[clamp(3rem,9vw,7rem)] leading-none tracking-tight"
+            style={{
+              animation: 'slam 420ms cubic-bezier(.2,1.5,.4,1) both',
+              color:
+                result.yards < 0 || result.event === 'interception' || result.event === 'fumble'
+                  ? 'var(--color-danger)'
+                  : result.yards >= 18
+                    ? 'var(--color-charge)'
+                    : result.yards === 0
+                      ? 'var(--color-chalk-dim)'
+                      : 'var(--color-chip)',
+              textShadow: '0 8px 40px rgba(0,0,0,.9)',
+            }}
           >
-            <div
-              className="font-display text-[clamp(3rem,9vw,7rem)] leading-none tracking-tight"
-              style={{
-                animation: 'slam 420ms cubic-bezier(.2,1.5,.4,1) both',
-                color:
-                  result.yards < 0 || result.event === 'interception' || result.event === 'fumble'
-                    ? 'var(--color-danger)'
-                    : result.yards >= 18
-                      ? 'var(--color-charge)'
-                      : result.yards === 0
-                        ? 'var(--color-chalk-dim)'
-                        : 'var(--color-chip)',
-                textShadow: '0 8px 40px rgba(0,0,0,.8)',
-              }}
-            >
-              {result.yards === 0
-                ? '—'
-                : `${result.yards > 0 ? '+' : ''}${result.yards}`}
-            </div>
-            <div className="mt-1 font-mono text-xs uppercase tracking-[0.4em] text-chalk-dim">
-              {result.event}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {result.yards === 0 ? '—' : `${result.yards > 0 ? '+' : ''}${result.yards}`}
+          </div>
+          <div className="mt-1 font-mono text-xs uppercase tracking-[0.4em] text-chalk">
+            {result.event}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

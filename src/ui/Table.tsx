@@ -1,9 +1,9 @@
-import { motion } from 'motion/react'
 import { OFF_FORMATIONS, PERSONNEL, type Personnel } from '../game/cards'
 import { OPPONENTS } from '../game/opponents'
 import { RULES, legalPlays, type ChipAbility, type Game } from '../game/engine'
 import { useGame } from './store'
 import { Field } from './Field'
+import { DEFAULT_FORMATION } from './formations'
 import { Hand } from './Hand'
 import { DriveLog, Matchup, Scoreboard, Scouting } from './Panels'
 
@@ -116,13 +116,11 @@ function PersonnelChoice({ game }: { game: Game }) {
             (c) => c.type === 'play' && OFF_FORMATIONS[c.form].pers === group,
           )
           return (
-            <motion.button
+            <button
               key={group}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.06 }}
+              style={{ animationDelay: `${i * 60}ms` }}
               onClick={() => declare(group)}
-              className="group rounded-[2px] border border-hash bg-board-deep/60 p-3 text-left transition-all hover:border-skill hover:bg-skill/[0.07]"
+              className="reveal group rounded-[2px] border border-hash bg-board-deep/60 p-3 text-left transition-all hover:border-skill hover:bg-skill/[0.07]"
             >
               <div className="font-display text-2xl leading-none tracking-wide text-chalk transition-colors group-hover:text-skill">
                 {group}
@@ -133,7 +131,7 @@ function PersonnelChoice({ game }: { game: Game }) {
               <div className="mt-2 font-mono text-[9px] leading-relaxed text-chalk-dim">
                 {plays.map((c) => (c.type === 'play' ? c.play : '')).join(' · ')}
               </div>
-            </motion.button>
+            </button>
           )
         })}
       </div>
@@ -167,22 +165,24 @@ export function Table({ game }: { game: Game }) {
           {game.won
             ? `You got there against ${game.opponentName}.`
             : `${game.opponentName} held you to ${game.points}.`}{' '}
-          You uncovered {Object.keys(game.revealed).length} of their hidden rules.
+          You uncovered {Object.keys(game.revealed).length} of their hidden tendencies.
         </p>
-        <Btn onClick={store.quit} tone="go">
-          new game
+        <Btn onClick={store.finishWeek} tone="go">
+          back to the schedule →
         </Btn>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto grid max-w-[1180px] gap-4 px-5 py-5 lg:grid-cols-[1fr_290px]">
-      <div className="space-y-3">
+    <div className="mx-auto grid max-w-[1180px] gap-3 px-5 py-3 lg:grid-cols-[1fr_290px]">
+      <div className="space-y-2.5">
         <Scoreboard game={game} />
 
         <Field
-          formation={game.lastCall?.form ?? null}
+          formation={
+            game.lastCall?.form ?? (game.declared ? DEFAULT_FORMATION[game.declared] : null)
+          }
           defFormation={game.defForm}
           result={showResult && game.lastSnap ? game.lastSnap.result : null}
           ballOn={game.ballOn}
@@ -282,10 +282,10 @@ export function Table({ game }: { game: Game }) {
             deck {game.deck.length} · discard {game.discard.length}
           </span>
           <button
-            onClick={store.quit}
+            onClick={store.abandon}
             className="font-mono text-[9px] uppercase tracking-[0.16em] text-hash transition-colors hover:text-danger"
           >
-            resign
+            abandon season
           </button>
         </div>
       </aside>

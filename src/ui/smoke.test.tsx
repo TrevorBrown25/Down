@@ -4,6 +4,9 @@ import { legalPlays } from '../game/engine'
 import { useGame } from './store'
 import { Pregame } from './Pregame'
 import { Table } from './Table'
+import { Season } from './Season'
+import { Draft } from './Draft'
+import { RunOver } from './RunOver'
 
 /**
  * Renders the real components against real engine state. Catches the crashes a
@@ -22,8 +25,9 @@ describe('pregame', () => {
 
 describe('the table', () => {
   test('renders every phase of a real game without throwing', () => {
-    for (const opponentName of ['Steel Curtain', 'The Shell', 'The Gamblers']) {
-      store().start('Pro Style', opponentName, 12)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      store().startRun('Pro Style', 12)
+      store().kickoff()
       const seen = new Set<string>()
       let steps = 0
 
@@ -54,7 +58,8 @@ describe('the table', () => {
   })
 
   test('renders with every optional action exercised', () => {
-    store().start('Air Raid', 'The Gamblers', 3)
+    store().startRun('Air Raid', 3)
+    store().kickoff()
     const game = () => {
       const g = store().game
       if (!g) throw new Error('no game')
@@ -93,7 +98,8 @@ describe('the table', () => {
   })
 
   test('renders the fourth-down kick and punt paths', () => {
-    store().start('Ground & Pound', 'The Shell', 5)
+    store().startRun('Ground & Pound', 5)
+    store().kickoff()
     // The kick and punt buttons only exist at the call, so get past personnel.
     const dealt = store().game
     if (!dealt) throw new Error('no game')
@@ -106,5 +112,81 @@ describe('the table', () => {
     if (!fourth) throw new Error('no game')
     expect(() => renderToStaticMarkup(<Table game={fourth} />)).not.toThrow()
     expect(renderToStaticMarkup(<Table game={fourth} />)).toContain('field goal')
+  })
+})
+
+describe('a full season', () => {
+  test('plays eight weeks end to end, rendering every screen', () => {
+    store().startRun('Pro Style', 21)
+    const seen = new Set<string>()
+    let guard = 0
+
+    while (guard++ < 60) {
+      const run = store().run
+      if (!run) break
+
+      if (run.status !== 'playing') {
+        seen.add('over')
+        expect(() => renderToStaticMarkup(<RunOver run={run} />)).not.toThrow()
+        break
+      }
+      if (run.pending) {
+        seen.add('draft')
+        expect(() => renderToStaticMarkup(<Draft run={run} />)).not.toThrow()
+        // Alternate taking and passing so both paths get exercised.
+        if (run.at % 2 === 0) store().draft(run.pending.cards[0].id)
+        else store().passOnDraft()
+        continue
+      }
+
+      seen.add('season')
+      expect(() => renderToStaticMarkup(<Season run={run} />)).not.toThrow()
+
+      store().kickoff()
+      let steps = 0
+      while (steps++ < 400) {
+        const game = store().game
+        if (!game || game.phase === 'over') break
+        if (game.phase === 'personnel') store().declare(game.groupsInHand[0])
+        else if (game.phase === 'result') store().advance()
+        else {
+          const legal = legalPlays(game)
+          if (legal.length === 0) store().punt()
+          else store().call(legal[0].id)
+        }
+      }
+      store().finishWeek()
+    }
+
+    const run = store().run
+    if (!run) throw new Error('run vanished')
+    expect(seen.has('season')).toBe(true)
+    expect(seen.has('draft')).toBe(true)
+    expect(seen.has('over')).toBe(true)
+    expect(run.history.length).toBeGreaterThan(0)
+    expect(['complete', 'eliminated']).toContain(run.status)
+  })
+
+  test('the deck actually grows when you draft', () => {
+    store().startRun('Air Raid', 33)
+    const before = store().run?.deck.length ?? 0
+    store().kickoff()
+    let steps = 0
+    while (steps++ < 400) {
+      const game = store().game
+      if (!game || game.phase === 'over') break
+      if (game.phase === 'personnel') store().declare(game.groupsInHand[0])
+      else if (game.phase === 'result') store().advance()
+      else {
+        const legal = legalPlays(game)
+        if (legal.length === 0) store().punt()
+        else store().call(legal[0].id)
+      }
+    }
+    store().finishWeek()
+    const offer = store().run?.pending
+    if (!offer) throw new Error('expected a draft offer')
+    store().draft(offer.cards[0].id)
+    expect(store().run?.deck.length).toBe(before + 1)
   })
 })

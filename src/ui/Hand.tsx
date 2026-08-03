@@ -105,7 +105,7 @@ export function Hand({
   }
 
   return (
-    <div className="relative h-[248px] select-none">
+    <div className="relative h-[212px] select-none">
       <AnimatePresence mode="popLayout">
         {cards.map((card, i) => {
           const offset = i - mid

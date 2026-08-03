@@ -82,7 +82,7 @@ export const grinderPolicy: Policy = {
   },
   play: (_game, legal) => {
     const score = (card: PlayCard) => {
-      if (card.play === 'Inside Run' || card.play === 'Power O') return 100
+      if (card.play === 'Inside Zone' || card.play === 'Power O' || card.play === 'Trap') return 100
       const play = OFF_PLAYS[card.play]
       return play.base + (play.kind === 'run' ? 5 : 0)
     }

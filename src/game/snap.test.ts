@@ -5,9 +5,9 @@ import { NO_MODS } from './resolve'
 import { resolveSnap, type SnapInput, type SnapOutcome } from './snap'
 
 const BASE: SnapInput = {
-  opponent: OPPONENTS['Steel Curtain'],
+  opponent: OPPONENTS['The Foundry'],
   formName: 'I-Form',
-  playName: 'Inside Run',
+  playName: 'Inside Zone',
   defFormName: '4-3',
   coverageName: 'Cover 3',
   defAdj: null,
@@ -18,6 +18,7 @@ const BASE: SnapInput = {
   protect: false,
   mods: NO_MODS,
   firedCounts: {},
+  lastPlayName: null,
 }
 
 /** Run the same snap across many seeds so probabilistic rules are covered. */
@@ -29,29 +30,29 @@ function many(overrides: Partial<SnapInput>, n = 500): SnapOutcome[] {
   return out
 }
 
-describe('Steel Curtain — Iron Front', () => {
+describe('The Foundry — Iron Front', () => {
   test('caps 1st-down runs at 2 yards', () => {
-    for (const { result } of many({ down: 1, playName: 'Inside Run' })) {
+    for (const { result } of many({ down: 1, playName: 'Inside Zone' })) {
       if (result.turnover) continue
       expect(result.yards).toBeLessThanOrEqual(2)
     }
   })
 
   test('leaves 2nd-down runs alone', () => {
-    const outcomes = many({ down: 2, playName: 'Inside Run' })
+    const outcomes = many({ down: 2, playName: 'Inside Zone' })
     expect(outcomes.some((o) => o.result.yards > 2)).toBe(true)
     expect(outcomes.every((o) => !o.fired.includes('ironFront'))).toBe(true)
   })
 
   test('reports itself as fired when it bites', () => {
-    const outcomes = many({ down: 1, playName: 'Inside Run' })
+    const outcomes = many({ down: 1, playName: 'Inside Zone' })
     expect(outcomes.some((o) => o.fired.includes('ironFront'))).toBe(true)
   })
 })
 
-describe('Steel Curtain — Gasses Out', () => {
+describe('The Foundry — Gasses Out', () => {
   test('stops capping 1st-down runs from possession 4', () => {
-    const outcomes = many({ down: 1, playName: 'Inside Run', possession: 4 })
+    const outcomes = many({ down: 1, playName: 'Inside Zone', possession: 4 })
     expect(outcomes.some((o) => o.result.yards > 2)).toBe(true)
     expect(outcomes.every((o) => !o.fired.includes('ironFront'))).toBe(true)
   })
@@ -65,17 +66,17 @@ describe('Steel Curtain — Gasses Out', () => {
   })
 })
 
-describe('Steel Curtain — No Deep Help', () => {
+describe('The Foundry — No Deep Help', () => {
   test('every deep ball that is not a sack or a pick gains at least 18', () => {
-    for (const { result } of many({ playName: 'Deep Pass', formName: 'Gun 11' })) {
+    for (const { result } of many({ playName: 'Fade', formName: 'Gun 11' })) {
       if (result.event === 'sack' || result.turnover) continue
       expect(result.yards).toBeGreaterThanOrEqual(18)
     }
   })
 })
 
-describe('Steel Curtain — No Deep Help expires', () => {
-  const deep = { playName: 'Deep Pass' as const, formName: 'Gun 11' as const }
+describe('The Foundry — No Deep Help expires', () => {
+  const deep = { playName: 'Fade' as const, formName: 'Gun 11' as const }
 
   test('stops rescuing deep balls once it has already burned them twice', () => {
     const outcomes = many({ ...deep, firedCounts: { singleHigh: 2 } })
@@ -96,7 +97,7 @@ describe('The Shell — Two-Deep Shell', () => {
   test('no deep pass ever gains more than 12', () => {
     for (const { result } of many({
       ...shell,
-      playName: 'Deep Pass',
+      playName: 'Fade',
       formName: 'Gun 11',
       defFormName: 'Dime',
       coverageName: 'Cover 2',
@@ -106,7 +107,7 @@ describe('The Shell — Two-Deep Shell', () => {
   })
 
   test('inside runs always gain at least 4 unless they are turned over', () => {
-    for (const { result } of many({ ...shell, playName: 'Inside Run', down: 2 })) {
+    for (const { result } of many({ ...shell, playName: 'Inside Zone', down: 2 })) {
       if (result.turnover) continue
       expect(result.yards).toBeGreaterThanOrEqual(4)
     }
@@ -132,12 +133,12 @@ describe('The Shell — Red-Zone Teeth', () => {
 describe('The Gamblers', () => {
   const gamblers = { opponent: OPPONENTS['The Gamblers'] }
 
-  test('a quick pass into their blitz always gains at least 8', () => {
+  test('a slant into their blitz always gains at least 8', () => {
     // The rule guarantees a yardage floor, not a particular event: a base roll
     // that was already a big play is passed through untouched.
     for (const { result } of many({
       ...gamblers,
-      playName: 'Quick Pass',
+      playName: 'Slant',
       formName: 'Gun 11',
       defFormName: '4-2-5',
       coverageName: 'Cover 1 Blitz',
@@ -189,7 +190,7 @@ describe('The Gamblers', () => {
 
 describe('charge', () => {
   test('is only spent by play action', () => {
-    const [outcome] = many({ playName: 'Inside Run', charge: 3 }, 1)
+    const [outcome] = many({ playName: 'Inside Zone', charge: 3 }, 1)
     expect(outcome.chargeUsed).toBe(0)
   })
 })
@@ -197,7 +198,7 @@ describe('charge', () => {
 describe('Max Protect', () => {
   test('converts every sack and turnover into something survivable', () => {
     for (const { result } of many({
-      playName: 'Deep Pass',
+      playName: 'Fade',
       formName: 'Gun 11',
       protect: true,
       down: 2,
@@ -210,7 +211,7 @@ describe('Max Protect', () => {
 
 describe('determinism', () => {
   test('the same seed and input always produce the same snap', () => {
-    const input: SnapInput = { ...BASE, playName: 'Deep Pass', formName: 'Gun 11' }
+    const input: SnapInput = { ...BASE, playName: 'Fade', formName: 'Gun 11' }
     expect(resolveSnap(input, makeRng(4242))).toEqual(resolveSnap(input, makeRng(4242)))
   })
 })

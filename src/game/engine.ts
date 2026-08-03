@@ -1,6 +1,6 @@
 import { makeRng, pick, shuffle, type Rng } from './rng'
 import {
-  buildDeck,
+  buildStarter,
   COVERAGES,
   OFF_FORMATIONS,
   OFF_PLAYS,
@@ -209,13 +209,19 @@ function startDown(game: Game, rng: Rng, fresh: boolean): Game {
 }
 
 export function newGame(
-  opts: { seed: number; archetype: DeckName; opponentName: string },
+  opts: {
+    seed: number
+    archetype: DeckName
+    opponentName: string
+    /** A run owns its deck, so it hands one in rather than building from style. */
+    deck?: readonly Card[]
+  },
   rng: Rng = makeRng(opts.seed),
 ): Game {
   const base: Game = {
     archetype: opts.archetype,
     opponentName: opts.opponentName,
-    deck: buildDeck(opts.archetype, rng),
+    deck: opts.deck ? shuffle(opts.deck, rng) : buildStarter(opts.archetype, rng),
     hand: [],
     discard: [],
     ballOn: 25,
@@ -450,6 +456,7 @@ export function callPlay(game: Game, cardId: number, rng: Rng): Game {
     protect,
     mods: { juice, bonusBlockers: fresh ? 1 : 0 },
     firedCounts: game.ruleFireCounts,
+    lastPlayName: game.lastCall?.play ?? null,
   }
   const outcome = resolveSnap({ opponent: opponentOf(game), ...input }, rng)
 
