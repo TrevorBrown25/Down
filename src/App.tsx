@@ -1,4 +1,5 @@
 import { useGame } from './ui/store'
+import { Menu } from './ui/Menu'
 import { Pregame } from './ui/Pregame'
 import { Season } from './ui/Season'
 import { Draft } from './ui/Draft'
@@ -8,10 +9,10 @@ import { RunOver } from './ui/RunOver'
 import { Table } from './ui/Table'
 
 export default function App() {
-  const { run, game } = useGame()
+  const { run, game, screen } = useGame()
 
   const view = () => {
-    if (!run) return <Pregame />
+    if (!run) return screen === 'menu' ? <Menu /> : <Pregame />
     if (game) return <Table game={game} />
     if (run.status !== 'playing') return <RunOver run={run} />
     if (run.pendingEvent) return <EventWeek run={run} />

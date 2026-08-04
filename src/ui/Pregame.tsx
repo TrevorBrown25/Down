@@ -5,12 +5,19 @@ import { useGame } from './store'
 
 export function Pregame() {
   const startRun = useGame((s) => s.startRun)
+  const toMenu = useGame((s) => s.toMenu)
   const [picked, setPicked] = useState<StyleName | null>(null)
 
   return (
     <div className="chalkboard chalk-smear min-h-screen">
       <div className="mx-auto max-w-4xl px-6 py-16">
         <div className="reveal mb-14">
+          <button
+            onClick={toMenu}
+            className="mb-6 font-mono text-[10px] uppercase tracking-[0.18em] text-hash transition-colors hover:text-chalk-dim"
+          >
+            ← back
+          </button>
           <h1 className="font-display text-[clamp(4rem,13vw,9rem)] leading-[0.82] tracking-tight text-chalk">
             DOWN
           </h1>
