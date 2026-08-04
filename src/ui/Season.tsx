@@ -1,4 +1,4 @@
-import { OFF_PLAYS, personnelOf, STARTERS, type Card } from '../game/cards'
+import { OFF_PLAYS, STARTERS, type Card } from '../game/cards'
 import { OPPONENTS } from '../game/opponents'
 import { SEASON, seasonRecord, type Run, type ScheduleNode } from '../game/run'
 import { useGame } from './store'
@@ -78,7 +78,6 @@ function DeckSummary({ deck }: { deck: Card[] }) {
       adj++
       continue
     }
-    groups[personnelOf(c.form)]++
     if (OFF_PLAYS[c.play].kind === 'run') runs++
     else passes++
   }

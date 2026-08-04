@@ -8,7 +8,6 @@ import {
   STARTERS,
   starterDeck,
   type Card,
-  type PlayCard,
   type StyleName,
 } from './cards'
 import { makeRng } from './rng'
@@ -16,7 +15,7 @@ import { makeRng } from './rng'
 const STYLES = Object.keys(STARTERS) as StyleName[]
 
 /** A card's identity ignoring which copy it is, for comparing decks. */
-const signature = (c: Card) => (c.type === 'play' ? `${c.form}/${c.play}` : `adj:${c.name}`)
+const signature = (c: Card) => (c.type === 'play' ? c.play : `adj:${c.name}`)
 
 /** Multiset intersection: what every one of these lists holds in common. */
 function sharedAcross(lists: string[][]): string[] {
@@ -38,17 +37,24 @@ describe('starter decks', () => {
     expect(starterDeck(style)).toHaveLength(16)
   })
 
-  test('all three styles share a twelve-card core', () => {
-    expect(core()).toHaveLength(12)
+  /**
+   * The shared core is deliberately small. A one-drive encounter deals you six
+   * cards, so a large core means all three styles play the same game — measured
+   * at nine shared plays, the identities were four cards out of sixteen and a
+   * style's finisher almost never appeared in hand.
+   */
+  test('the deck is more its own than shared', () => {
+    // 9 in common of 16 was measured as too much: with a six-card hand in a
+    // one-drive encounter every style drew the same game and its finisher
+    // almost never appeared. Six plays and the three adjustments is the floor
+    // that keeps a style recognisable.
+    const shared = core().length
+    expect(shared).toBeLessThanOrEqual(9)
+    expect(starterDeck('Air Raid').length - shared).toBeGreaterThanOrEqual(7)
   })
 
-  test('the core is nine plays and three adjustments', () => {
+  test('the three adjustments are common to everyone', () => {
     expect(core().filter((s) => s.startsWith('adj:'))).toHaveLength(3)
-    expect(core().filter((s) => !s.startsWith('adj:'))).toHaveLength(9)
-  })
-
-  test.each(STYLES)('%s adds exactly four cards of its own', (style) => {
-    expect(starterDeck(style)).toHaveLength(core().length + 4)
   })
 
   test('Hot Read is earned, not issued', () => {
@@ -57,12 +63,14 @@ describe('starter decks', () => {
   })
 
   test.each(STYLES)('%s can field all three personnel groups', (style) => {
-    // The declaration is the core decision; a style that cannot reach a group
-    // would silently delete it.
+    // The declaration is the core decision; a style whose plays cannot be run
+    // out of some group would silently delete that group.
     const groups = new Set(
-      starterDeck(style)
-        .filter((c): c is PlayCard => c.type === 'play')
-        .map((c) => personnelOf(c.form)),
+      (Object.keys(OFF_FORMATIONS) as (keyof typeof OFF_FORMATIONS)[])
+        .filter((form) =>
+          starterDeck(style).some((c) => c.type === 'play' && canRun(form, c.play)),
+        )
+        .map((form) => personnelOf(form)),
     )
     expect(groups.size).toBe(3)
   })
@@ -75,7 +83,6 @@ describe('starter decks', () => {
   test.each(STYLES)('%s only references real formations and plays', (style) => {
     for (const card of starterDeck(style)) {
       if (card.type !== 'play') continue
-      expect(OFF_FORMATIONS[card.form]).toBeDefined()
       expect(OFF_PLAYS[card.play]).toBeDefined()
     }
   })
@@ -95,10 +102,12 @@ describe('starter decks', () => {
 })
 
 describe('formation locks', () => {
-  test.each(STYLES)('%s only carries plays its formations can run', (style) => {
+  test.each(STYLES)('%s can line up everything it carries somewhere', (style) => {
+    // A card no formation can run would be a permanent dead draw.
+    const forms = Object.keys(OFF_FORMATIONS) as (keyof typeof OFF_FORMATIONS)[]
     for (const card of starterDeck(style)) {
       if (card.type !== 'play') continue
-      expect(canRun(card.form, card.play)).toBe(true)
+      expect(forms.some((f) => canRun(f, card.play))).toBe(true)
     }
   })
 

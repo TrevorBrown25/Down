@@ -116,6 +116,7 @@ export function Scouting({ game }: { game: Game }) {
 export function Matchup({ game }: { game: Game }) {
   if (!game.defPack || !game.defForm) return null
   const blitzing = game.defCov ? COVERAGES[game.defCov].rush >= 6 : false
+  const man = game.defCov ? COVERAGES[game.defCov].man : false
 
   return (
     <div className="tape flex flex-wrap items-center gap-x-5 gap-y-2 rounded-sm px-4 py-2.5">
@@ -132,14 +133,31 @@ export function Matchup({ game }: { game: Game }) {
       </span>
       <span className="font-mono text-[10px] text-chalk-dim">{game.defForm}</span>
 
-      {game.known && (
-        <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.16em] text-skill">
-          read · {game.known}
+      {/*
+        The coverage, in the open. Hiding it was the whole problem: the man/zone
+        card grid is unusable if you cannot see which one you are facing, so a
+        careful call and a random one played the same.
+      */}
+      {game.defCov && (
+        <span className="flex items-baseline gap-2">
+          <span
+            className="font-display text-xl leading-none"
+            style={{ color: man ? 'var(--color-danger)' : 'var(--color-skill)' }}
+          >
+            {man ? 'MAN' : 'ZONE'}
+          </span>
+          <span className="font-mono text-[10px] text-chalk-dim">{game.defCov}</span>
+          {blitzing && (
+            <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-danger">
+              blitz
+            </span>
+          )}
         </span>
       )}
-      {!game.known && blitzing && game.lastSnap && (
-        <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.16em] text-danger">
-          they brought it
+
+      {game.known && (
+        <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.16em] text-charge">
+          {game.known}
         </span>
       )}
       {game.audibled && (

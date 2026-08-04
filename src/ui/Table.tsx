@@ -1,4 +1,4 @@
-import { OFF_FORMATIONS, PERSONNEL, type Personnel } from '../game/cards'
+import { canRun, OFF_FORMATIONS, type OffFormationName } from '../game/cards'
 import { OPPONENTS } from '../game/opponents'
 import { legalPlays, type ChipAbility, type Game } from '../game/engine'
 import { useGame } from './store'
@@ -100,36 +100,56 @@ function ChipBar({ game }: { game: Game }) {
   )
 }
 
-function PersonnelChoice({ game }: { game: Game }) {
+/**
+ * Line up. You pick the formation knowing your hand, so stranding yourself is a
+ * mistake you can make rather than one the deal makes for you — and the count
+ * on each card says exactly what it opens.
+ */
+function FormationChoice({ game }: { game: Game }) {
   const declare = useGame((s) => s.declare)
+  const forms = Object.keys(OFF_FORMATIONS) as OffFormationName[]
+
   return (
     <div>
       <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-chalk-faint">
-        send out your personnel
+        line up
         <span className="ml-2 normal-case tracking-normal text-hash">
-          — they see this and match. your play stays hidden.
+          — they see the personnel and match it. your play stays hidden.
         </span>
       </p>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {game.groupsInHand.map((group: Personnel, i) => {
-          const plays = game.hand.filter(
-            (c) => c.type === 'play' && OFF_FORMATIONS[c.form].pers === group,
-          )
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {forms.map((form, i) => {
+          const spec = OFF_FORMATIONS[form]
+          const runnable = game.hand.filter((c) => c.type === 'play' && canRun(form, c.play))
+          const dead = runnable.length === 0
+
           return (
             <button
-              key={group}
-              style={{ animationDelay: `${i * 60}ms` }}
-              onClick={() => declare(group)}
-              className="reveal group rounded-[2px] border border-hash bg-board-deep/60 p-3 text-left transition-all hover:border-skill hover:bg-skill/[0.07]"
+              key={form}
+              style={{ animationDelay: `${i * 50}ms` }}
+              onClick={() => declare(form)}
+              disabled={dead}
+              className={`reveal group rounded-[2px] border p-3 text-left transition-all ${
+                dead
+                  ? 'cursor-not-allowed border-hash/40 opacity-35'
+                  : 'border-hash bg-board-deep/60 hover:border-skill hover:bg-skill/[0.07]'
+              }`}
             >
-              <div className="font-display text-2xl leading-none tracking-wide text-chalk transition-colors group-hover:text-skill">
-                {group}
+              <div className="flex items-baseline justify-between">
+                <span className="font-display text-xl leading-none tracking-wide text-chalk transition-colors group-hover:text-skill">
+                  {form.toUpperCase()}
+                </span>
+                <span className="font-mono text-[9px] tracking-widest text-chalk-faint">
+                  {spec.pers}
+                </span>
               </div>
               <div className="mt-1 font-mono text-[9px] text-chalk-faint">
-                {PERSONNEL[group].label}
+                {spec.blockers} blockers · {spec.spread} wide
               </div>
               <div className="mt-2 font-mono text-[9px] leading-relaxed text-chalk-dim">
-                {plays.map((c) => (c.type === 'play' ? c.play : '')).join(' · ')}
+                {dead
+                  ? 'nothing in hand runs from here'
+                  : runnable.map((c) => (c.type === 'play' ? c.play : '')).join(' · ')}
               </div>
             </button>
           )
@@ -197,7 +217,7 @@ export function Table({ game }: { game: Game }) {
 
         {game.phase !== 'personnel' && <Matchup game={game} />}
 
-        {game.phase === 'personnel' && <PersonnelChoice game={game} />}
+        {game.phase === 'personnel' && <FormationChoice game={game} />}
 
         {game.phase === 'call' && (
           <div className="space-y-3">
@@ -236,11 +256,6 @@ export function Table({ game }: { game: Game }) {
               {game.lastSnap.result.protected && (
                 <div className="mt-1.5 font-mono text-[10px] text-chip">
                   ● max protect absorbed it
-                </div>
-              )}
-              {game.disguised && game.known && (
-                <div className="mt-1.5 font-mono text-[10px] text-danger">
-                  disguise — your motion read was a lie
                 </div>
               )}
               {game.lastSnap.fired.map((key) => (

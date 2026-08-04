@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, test } from 'vitest'
-import { legalPlays } from '../game/engine'
+import { legalPlays, playableFormations } from '../game/engine'
 import { useGame } from './store'
 import { Pregame } from './Pregame'
 import { Table } from './Table'
@@ -42,7 +42,7 @@ describe('the table', () => {
         if (game.phase === 'over') break
 
         if (game.phase === 'personnel') {
-          store().declare(game.groupsInHand[0])
+          store().declare(playableFormations(game)[0])
         } else if (game.phase === 'result') {
           store().advance()
         } else {
@@ -67,7 +67,7 @@ describe('the table', () => {
       return g
     }
 
-    if (game().phase === 'personnel') store().declare(game().groupsInHand[0])
+    if (game().phase === 'personnel') store().declare(playableFormations(game())[0])
 
     // Buy a read, arm chips, toss, hurry up, audible — each must render after.
     const read = game().hand.find(
@@ -98,13 +98,31 @@ describe('the table', () => {
     }
   })
 
+  test('the coverage is on screen once personnel is declared', () => {
+    // The whole point of showing it: a man/zone card grid is unusable if you
+    // cannot see which one you are facing. If this ever regresses, careful play
+    // and random play collapse back into the same thing.
+    store().startRun('Pro Style', 17)
+    store().kickoff()
+    const dealt = store().game
+    if (!dealt) throw new Error('no game')
+    if (dealt.phase === 'personnel') store().declare(playableFormations(dealt)[0])
+
+    const game = store().game
+    if (!game) throw new Error('no game')
+    expect(game.defCov).not.toBeNull()
+    const html = renderToStaticMarkup(<Table game={game} />)
+    expect(html).toMatch(/>MAN<|>ZONE</)
+    expect(html).toContain(game.defCov as string)
+  })
+
   test('renders the fourth-down kick and punt paths', () => {
     store().startRun('Ground & Pound', 5)
     store().kickoff()
     // The kick and punt buttons only exist at the call, so get past personnel.
     const dealt = store().game
     if (!dealt) throw new Error('no game')
-    if (dealt.phase === 'personnel') store().declare(dealt.groupsInHand[0])
+    if (dealt.phase === 'personnel') store().declare(playableFormations(dealt)[0])
 
     const g = store().game
     if (!g) throw new Error('no game')
@@ -155,7 +173,7 @@ describe('a full season', () => {
       while (steps++ < 400) {
         const game = store().game
         if (!game || game.phase === 'over') break
-        if (game.phase === 'personnel') store().declare(game.groupsInHand[0])
+        if (game.phase === 'personnel') store().declare(playableFormations(game)[0])
         else if (game.phase === 'result') store().advance()
         else {
           const legal = legalPlays(game)
@@ -184,7 +202,7 @@ describe('a full season', () => {
     while (steps++ < 400) {
       const game = store().game
       if (!game || game.phase === 'over') break
-      if (game.phase === 'personnel') store().declare(game.groupsInHand[0])
+      if (game.phase === 'personnel') store().declare(playableFormations(game)[0])
       else if (game.phase === 'result') store().advance()
       else {
         const legal = legalPlays(game)

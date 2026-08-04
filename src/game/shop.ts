@@ -1,5 +1,5 @@
 import { pick, type Rng } from './rng'
-import { OFF_PLAYS, personnelOf, type Card, type Personnel } from './cards'
+import { canRun, OFF_FORMATIONS, OFF_PLAYS, personnelOf, type Card, type Personnel } from './cards'
 import { DRILLS, type Drill } from './events'
 
 /**
@@ -47,22 +47,26 @@ export const priceOf = (item: ShopItem) => item.price
 /** What a week of shopping is worth to a sheet that lives in this group. */
 export function buildShop(
   home: Personnel,
-  plays: readonly [import('./cards').OffFormationName, import('./cards').OffPlayName][],
+  plays: readonly import('./cards').OffPlayName[],
   nextCardId: number,
   rng: Rng,
 ): { offer: ShopOffer; nextCardId: number } {
   const items: ShopItem[] = []
   let id = nextCardId
 
-  // Two cards, biased toward the group the sheet already lives in — a shop that
-  // only sells cards you cannot line up is not a shop.
-  const wanted = plays.filter(([form]) => personnelOf(form) === home)
+  // Two plays, the first biased toward something the sheet's own formations can
+  // actually line up — a shop selling what you cannot run is not a shop.
+  const wanted = plays.filter((play) =>
+    (Object.keys(OFF_FORMATIONS) as (keyof typeof OFF_FORMATIONS)[]).some(
+      (f) => personnelOf(f) === home && canRun(f, play),
+    ),
+  )
   for (let n = 0; n < 2; n++) {
     const pool = n === 0 && wanted.length > 0 ? wanted : plays
-    const [form, play] = pick(pool, rng)
+    const play = pick(pool, rng)
     items.push({
       kind: 'card',
-      card: { id, type: 'play', form, play },
+      card: { id, type: 'play', play },
       // A stronger play costs more. Keeps the cheap shelf worth looking at.
       price: Math.round(PRICES.card + (OFF_PLAYS[play].base - 4) * 3),
     })
@@ -85,7 +89,7 @@ export function buildShop(
 export const describeItem = (item: ShopItem): string => {
   switch (item.kind) {
     case 'card':
-      return item.card.type === 'play' ? `${item.card.form} · ${item.card.play}` : 'card'
+      return item.card.type === 'play' ? item.card.play : 'card'
     case 'cut':
       return 'cut a card from the sheet'
     case 'drill':

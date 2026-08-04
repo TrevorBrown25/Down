@@ -1,4 +1,23 @@
-import { ADJ_TEXT, OFF_PLAYS, personnelOf, type Card } from '../game/cards'
+import {
+  ADJ_TEXT,
+  canRun,
+  OFF_FORMATIONS,
+  OFF_PLAYS,
+  personnelOf,
+  type Card,
+  type OffFormationName,
+  type OffPlayName,
+} from '../game/cards'
+
+/** Which personnel groups can line up and run this. Replaces the printed one. */
+function formsFor(play: OffPlayName): string {
+  const groups = new Set(
+    (Object.keys(OFF_FORMATIONS) as OffFormationName[])
+      .filter((f) => canRun(f, play))
+      .map((f) => personnelOf(f)),
+  )
+  return groups.size === 3 ? 'any' : [...groups].join('/')
+}
 
 const RUN_FACE = 'linear-gradient(168deg,#2c3b30,#1d2822)'
 const PASS_FACE = 'linear-gradient(168deg,#293646,#1b2530)'
@@ -44,7 +63,7 @@ export function CardFace({ card, dim = false }: { card: Card; dim?: boolean }) {
           {play.kind}
         </span>
         <span className="font-mono text-[8px] tracking-widest text-chalk-faint">
-          {personnelOf(card.form)}
+          {formsFor(card.play)}
         </span>
       </div>
 
@@ -52,7 +71,6 @@ export function CardFace({ card, dim = false }: { card: Card; dim?: boolean }) {
         <div className="font-display text-[15px] leading-[1.05] tracking-wide text-chalk">
           {card.play.toUpperCase()}
         </div>
-        <div className="mt-0.5 font-mono text-[9px] text-chalk-faint">{card.form}</div>
       </div>
 
       <p className="font-mono text-[8.5px] leading-[1.35] text-chalk-dim">{play.text}</p>

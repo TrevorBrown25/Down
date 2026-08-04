@@ -2,13 +2,28 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useState } from 'react'
 import {
   ADJ_TEXT,
+  canRun,
+  OFF_FORMATIONS,
   OFF_PLAYS,
   personnelOf,
   type AdjustmentCard,
   type Card,
+  type OffFormationName,
+  type OffPlayName,
   type PlayCard,
 } from '../game/cards'
-import type { Game } from '../game/engine'
+import { legalPlays, type Game } from '../game/engine'
+
+/** Which personnel groups can line up and run this. Replaces the printed one. */
+function formsFor(play: OffPlayName): string {
+  const groups = new Set(
+    (Object.keys(OFF_FORMATIONS) as OffFormationName[])
+      .filter((f) => canRun(f, play))
+      .map((f) => personnelOf(f)),
+  )
+  return groups.size === 3 ? 'any' : [...groups].join('/')
+}
+
 
 type Props = {
   game: Game
@@ -44,7 +59,7 @@ function PlayFace({ card, locked }: { card: PlayCard; locked: boolean }) {
           {play.kind}
         </span>
         <span className="font-mono text-[8px] tracking-widest text-chalk-faint">
-          {personnelOf(card.form)}
+          {formsFor(card.play)}
         </span>
       </div>
 
@@ -52,7 +67,6 @@ function PlayFace({ card, locked }: { card: PlayCard; locked: boolean }) {
         <div className="font-display text-[15px] leading-[1.05] tracking-wide text-chalk">
           {card.play.toUpperCase()}
         </div>
-        <div className="mt-0.5 font-mono text-[9px] text-chalk-faint">{card.form}</div>
       </div>
 
       <p className="font-mono text-[8.5px] leading-[1.35] text-chalk-dim">{play.text}</p>
@@ -90,8 +104,8 @@ export function Hand({
   const cards = game.hand
   const mid = (cards.length - 1) / 2
 
-  const isLegal = (c: Card) =>
-    c.type === 'play' && (game.audibled || personnelOf(c.form) === game.declared)
+  const callable = new Set(legalPlays(game).map((c) => c.id))
+  const isLegal = (c: Card) => c.type === 'play' && callable.has(c.id)
 
   const act = (card: Card) => {
     if (!playable) return

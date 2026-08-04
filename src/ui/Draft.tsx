@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { personnelOf, type Card } from '../game/cards'
+import { type Card } from '../game/cards'
 import { SEASON, type Run } from '../game/run'
 import { CardFace } from './CardFace'
 import { NextUp } from './NextUp'
@@ -34,7 +34,7 @@ function CutList({
   }
 
   const sorted = [...run.deck].sort((a, b) => {
-    const key = (c: Card) => (c.type === 'play' ? `${personnelOf(c.form)}${c.play}` : `z${c.name}`)
+    const key = (c: Card) => (c.type === 'play' ? c.play : `z${c.name}`)
     return key(a).localeCompare(key(b))
   })
 

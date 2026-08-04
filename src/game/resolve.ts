@@ -150,7 +150,11 @@ export function resolvePass(
 
   // Moving the pocket takes most of the rush out of the play.
   const pressure = play.bootleg ? heat - 3 : heat
-  if (rng() < clamp(0.05 + (pressure - 2) * 0.16, 0.02, 0.75)) {
+  // Centred on the pressure a real formation actually generates (-2 to +2).
+  // The old curve only left its floor above pressure 2, which happens in one
+  // formation-coverage pairing out of eight — so protection was a dead stat and
+  // every formation threw identically.
+  if (rng() < clamp(0.08 + pressure * 0.045, 0.015, 0.7)) {
     return { yards: Math.round(-7 - rng() * 3), event: 'sack' }
   }
 
@@ -165,7 +169,11 @@ export function resolvePass(
       : play.depth === 2
         ? (def.cov.deepHelp + def.cov.underneath) / 2
         : def.cov.underneath
-  const cover = help + def.form.cov - play.depth
+  // Receivers split wide stretch a zone — there is simply more grass to cover.
+  // A man defender just follows them, so it barely helps. This is the other
+  // half of the formation trade: Gun 11 throws better and protects worse.
+  const stretch = form.spread * (def.cov.man ? 0.15 : 0.45)
+  const cover = help + def.form.cov - play.depth - stretch
   let inc = clamp(0.16 + cover * 0.08 + play.depth * 0.07 - matchup * 0.11, 0.04, 0.75)
   if (play.allOrNothing) {
     inc = clamp(inc + 0.1 - (def.form.box >= 7 ? 0.25 : 0), 0.04, 0.8)

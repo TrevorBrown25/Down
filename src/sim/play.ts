@@ -3,7 +3,7 @@ import { type DeckName } from '../game/cards'
 import {
   callPlay,
   challenge,
-  declarePersonnel,
+  declareFormation,
   fieldGoal,
   legalPlays,
   newGame,
@@ -40,7 +40,7 @@ const MAX_STEPS = 2000
 
 function step(game: Game, policy: Policy, rng: Rng, tally: Tally): Game {
   if (game.phase === 'personnel') {
-    return declarePersonnel(game, policy.personnel(game, rng), rng)
+    return declareFormation(game, policy.formation(game, rng), rng)
   }
   if (game.phase === 'result') {
     if (!game.challengeUsed && policy.challenge?.(game)) return challenge(game, rng)

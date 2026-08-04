@@ -15,7 +15,7 @@ import {
   type StyleName,
 } from './cards'
 import { OPPONENTS, opponentsByTier } from './opponents'
-import { newGame, targetFor, type Game } from './engine'
+import { newGame, shapeFor, targetFor, type Game } from './engine'
 import {
   addInjury,
   addPractice,
@@ -27,9 +27,14 @@ import {
 import { buildShop, ECONOMY, type ShopOffer } from './shop'
 
 export const SEASON = {
-  games: 8,
+  /**
+   * Many short encounters rather than a few long ones. A single drive is close
+   * to a coin flip whatever you call, so skill has to accumulate across the
+   * season instead of inside any one game.
+   */
+  games: 14,
   /** Absorb two and you are still alive. The third ends it: 6-2 or bust. */
-  lossesAllowed: 2,
+  lossesAllowed: 6,
   draftSize: 3,
   /** Cutting below this would starve the hand. */
   minDeck: 12,
@@ -108,8 +113,8 @@ export type Run = {
  * season game has more to discover rather than just bigger numbers.
  */
 function tierFor(week: number): number {
-  if (week <= 2) return 1
-  if (week <= 5) return 2
+  if (week <= 5) return 1
+  if (week <= 10) return 2
   return 3
 }
 
@@ -169,10 +174,18 @@ export function newRun(style: StyleName, seed: number): Run {
   }
 }
 
-/** The personnel group this sheet actually lives in. */
+/**
+ * The personnel group this sheet leans on: whichever group's formations can run
+ * the most of what you own. With formation decoupled from the card, a deck no
+ * longer *lives* in a group — it just runs better out of one.
+ */
 export function homeGroup(run: Run): Personnel {
   const owned: Record<Personnel, number> = { '21': 0, '12': 0, '11': 0 }
-  for (const c of run.deck) if (c.type === 'play') owned[personnelOf(c.form)]++
+  for (const form of Object.keys(OFF_FORMATIONS) as OffFormationName[]) {
+    const n = run.deck.filter((c) => c.type === 'play' && canRun(form, c.play)).length
+    const g = personnelOf(form)
+    owned[g] = Math.max(owned[g], n)
+  }
   return (Object.keys(owned) as Personnel[]).reduce((a, b) => (owned[a] >= owned[b] ? a : b))
 }
 
@@ -199,6 +212,7 @@ export function startGame(run: Run, rng: Rng): Game {
       bonusChips: run.bonusChips,
       intel: run.intel,
       target: targetFor(node.tier),
+      possessions: shapeFor(node.tier).drives,
     },
     rng,
   )
@@ -206,25 +220,14 @@ export function startGame(run: Run, rng: Rng): Game {
 
 /* ------------------------------- the draft ------------------------------- */
 
-const FORMATIONS = Object.keys(OFF_FORMATIONS) as OffFormationName[]
 const PLAYS = Object.keys(OFF_PLAYS) as OffPlayName[]
 const ADJUSTMENTS = Object.keys(ADJ_TEXT) as AdjustmentName[]
 
-/**
- * Everything you might be offered. For now this is the existing plays in every
- * formation plus the four adjustments; authored play types land here next and
- * nothing else has to change.
- */
-export function draftPool(): {
-  plays: [OffFormationName, OffPlayName][]
-  adjustments: AdjustmentName[]
-} {
-  const plays: [OffFormationName, OffPlayName][] = []
-  for (const form of FORMATIONS) {
-    // Only combinations a real offense could line up and run.
-    for (const play of PLAYS) if (canRun(form, play)) plays.push([form, play])
-  }
-  return { plays, adjustments: ADJUSTMENTS }
+/** Everything you might be offered. */
+export function draftPool(): { plays: OffPlayName[]; adjustments: AdjustmentName[] } {
+  // Just the plays. Which formation you run one from is a decision at the line,
+  // not a property of the card, so the pool is the playbook itself.
+  return { plays: [...PLAYS], adjustments: ADJUSTMENTS }
 }
 
 function offer(
@@ -242,14 +245,11 @@ function offer(
     const card: Card =
       rng() < 0.2
         ? { id, type: 'adj', name: pick(pool.adjustments, rng) }
-        : (() => {
-            const [form, play] = pick(pool.plays, rng)
-            return { id, type: 'play', form, play } as Card
-          })()
+        : { id, type: 'play', play: pick(pool.plays, rng) }
 
     const already = cards.some((c) =>
       c.type === 'play' && card.type === 'play'
-        ? c.form === card.form && c.play === card.play
+        ? c.play === card.play
         : c.type === 'adj' && card.type === 'adj' && c.name === card.name,
     )
     if (already) continue

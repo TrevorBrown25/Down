@@ -1,9 +1,17 @@
 import { describe, expect, test } from 'vitest'
 import { makeRng, type Rng } from '../game/rng'
-import { OFF_PLAYS, personnelOf, STARTERS, type Card, type StyleName } from '../game/cards'
+import {
+  canRun,
+  OFF_FORMATIONS,
+  OFF_PLAYS,
+  personnelOf,
+  STARTERS,
+  type Card,
+  type StyleName,
+} from '../game/cards'
 import {
   callPlay,
-  declarePersonnel,
+  declareFormation,
   fieldGoal,
   legalPlays,
   nextDown,
@@ -16,6 +24,7 @@ import {
   chooseEventOption,
   currentNode,
   finishGame,
+  homeGroup,
   newRun,
   buyItem,
   leaveShop,
@@ -41,7 +50,7 @@ function playOut(start: Game, policy: Policy, rng: Rng): Game {
   let steps = 0
   while (game.phase !== 'over' && steps++ < 500) {
     if (game.phase === 'personnel') {
-      game = declarePersonnel(game, policy.personnel(game, rng), rng)
+      game = declareFormation(game, policy.formation(game, rng), rng)
       continue
     }
     if (game.phase === 'result') {
@@ -72,21 +81,17 @@ function playOut(start: Game, policy: Policy, rng: Rng): Game {
  * card that deepens the group you already live in beats a stronger card that
  * strands you.
  */
-/** The personnel group this sheet actually lives in. */
-function homeGroup(run: Run): string {
-  const owned: Record<string, number> = { '21': 0, '12': 0, '11': 0 }
-  for (const c of run.deck) if (c.type === 'play') owned[personnelOf(c.form)]++
-  return (Object.keys(owned) as (keyof typeof owned)[]).reduce((a, b) =>
-    owned[a] >= owned[b] ? a : b,
-  )
-}
+
 
 /** How much this sheet wants a given card. Higher is better. */
 function cardValue(run: Run, c: Card): number {
   if (c.type !== 'play') return 4
   const play = OFF_PLAYS[c.play]
+  const home = homeGroup(run)
   let v = play.base * 0.4
-  if (personnelOf(c.form) === homeGroup(run)) v += 10
+  // Worth more if a formation in the group this sheet leans on can run it.
+  const forms = Object.keys(OFF_FORMATIONS) as (keyof typeof OFF_FORMATIONS)[]
+  if (forms.some((f) => personnelOf(f) === home && canRun(f, c.play))) v += 10
   return v
 }
 

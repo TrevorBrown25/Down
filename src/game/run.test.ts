@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { makeRng } from './rng'
 import { STARTERS, type StyleName } from './cards'
-import { legalPlays, type Game } from './engine'
+import { legalPlays, playableFormations, type Game } from './engine'
 import {
   SEASON,
   chooseEventOption,
@@ -87,32 +87,41 @@ describe('playing the season', () => {
     expect(after.history).toHaveLength(1)
   })
 
-  // 6-2 or bust: two losses are survivable, the third ends the season.
-  test('a third loss ends the run', () => {
-    expect(march(newRun('Pro Style', 5), [false, false, false]).status).toBe('eliminated')
+  /**
+   * The allowance scales with the season length — with many short encounters it
+   * is closer to HP than to strikes, so these read it rather than hardcoding a
+   * number that goes stale every time the schedule changes.
+   */
+  test('one loss past the allowance ends the run', () => {
+    const fatal = new Array(SEASON.lossesAllowed + 1).fill(false)
+    expect(march(newRun('Pro Style', 5), fatal).status).toBe('eliminated')
   })
 
-  test('two losses leaves you alive', () => {
-    const after = march(newRun('Pro Style', 5), [false, false])
+  test('spending the whole allowance leaves you alive', () => {
+    const after = march(newRun('Pro Style', 5), new Array(SEASON.lossesAllowed).fill(false))
     expect(after.losses).toBe(SEASON.lossesAllowed)
     expect(after.status).toBe('playing')
   })
 
   test('surviving the whole schedule completes the run', () => {
-    const after = march(newRun('Pro Style', 5), [true, false, true, true, false, true, true, true])
+    // Every game won but the allowance spent, so it survives to the last week.
+    const results = new Array(SEASON.games)
+      .fill(true)
+      .map((_, i) => i >= SEASON.lossesAllowed)
+    const after = march(newRun('Pro Style', 5), results)
     expect(after.status).toBe('complete')
     expect(after.wins + after.losses).toBe(SEASON.games)
   })
 
   test('an eliminated run cannot start another game', () => {
-    const dead = march(newRun('Pro Style', 5), [false, false, false])
+    const dead = march(newRun('Pro Style', 5), new Array(SEASON.lossesAllowed + 1).fill(false))
     expect(() => startGame(dead, makeRng(1))).toThrow()
   })
 
   test('every game is playable from the run deck', () => {
     const run = newRun('Air Raid', 11)
     const game = startGame(run, makeRng(2))
-    expect(game.groupsInHand.length).toBeGreaterThan(0)
+    expect(playableFormations(game).length).toBeGreaterThan(0)
     if (game.phase === 'call') expect(legalPlays(game).length).toBeGreaterThan(0)
   })
 })

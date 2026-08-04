@@ -370,13 +370,13 @@ export const DEF_ADJ: Record<DefAdjName, DefAdj> = {
 export const QUICK_ADJUSTMENTS: readonly AdjustmentName[] = ['Motion', 'Hot Read']
 
 export const ADJ_TEXT: Record<AdjustmentName, string> = {
-  Motion: 'Learn MAN or ZONE. They may disguise.',
-  'Hot Read': 'See their exact coverage. No disguise.',
+  Motion: 'Shift them — they drop this coverage and show a different one.',
+  'Hot Read': 'Film room. Uncover one tendency they were hiding.',
   'Quick Count': 'Snap fast — their adjustment never comes.',
   Audible: 'Change the call at the line. Any play in your hand, whatever they matched.',
 }
 
-export type DeckEntry = readonly [OffFormationName, OffPlayName, number]
+export type DeckEntry = readonly [OffPlayName, number]
 export type AdjEntry = readonly [AdjustmentName, number]
 
 /**
@@ -384,16 +384,13 @@ export type AdjEntry = readonly [AdjustmentName, number]
  * all three personnel groups so the declaration is always a real choice.
  */
 const CORE_PLAYS: readonly DeckEntry[] = [
-  ['I-Form', 'Power O', 1],
-  ['I-Form', 'Inside Zone', 1],
-  ['Singleback', 'Inside Zone', 1],
-  ['Singleback', 'Counter', 1],
-  ['Singleback', 'Play Action', 1],
-  // One complete man/zone pair in the core, so the concept teaches itself.
-  ['Gun 12', 'Slant', 1],
-  ['Gun 12', 'Stick', 1],
-  ['Gun 11', 'Slant', 1],
-  ['Gun 11', 'Fade', 1],
+  // Deliberately small. With a six-card hand in a one-drive encounter, a large
+  // shared core means every style draws the same game — measured: nine shared
+  // plays left the three identities separated by 4 cards out of 16, and a lone
+  // finisher almost never showed up. Identity has to be most of the deck.
+  ['Inside Zone', 2],
+  ['Slant', 2],
+  ['Power O', 1],
 ]
 
 /** Hot Read is deliberately NOT here — it never lies, so you draft it. */
@@ -432,10 +429,14 @@ export const STARTERS: Record<StyleName, Starter> = {
     identity: 'Lives in 21 personnel and banks ◆ faster than anyone.',
     camp: [{ group: '21', drill: 'blocking' }],
     plays: [
-      ['I-Form', 'Jumbo', 1],
-      ['I-Form', 'Counter', 1],
-      ['I-Form', 'Play Action', 1],
-      ['I-Form', 'Trap', 1],
+      ['Counter', 1],
+      ['Trap', 1],
+      ['Jumbo', 1],
+      ['Toss Sweep', 1],
+      ['Outside Zone', 1],
+      // The run sets up the shot, and this deck banks ◆ faster than anyone.
+      ['Play Action', 2],
+      ['Stick', 1],
     ],
     adjustments: [],
   },
@@ -448,10 +449,13 @@ export const STARTERS: Record<StyleName, Starter> = {
       { group: '11', drill: 'film' },
     ],
     plays: [
-      ['Gun 11', 'Stick', 1],
-      ['Gun 11', 'Four Verticals', 1],
-      ['Gun 11', 'Crosser', 1],
-      ['Gun 11', 'Screen', 1],
+      ['Four Verticals', 1],
+      ['Crosser', 2],
+      ['Screen', 1],
+      ['RPO', 1],
+      ['Stick', 1],
+      ['Fade', 1],
+      ['Dig', 1],
     ],
     adjustments: [],
   },
@@ -460,10 +464,14 @@ export const STARTERS: Record<StyleName, Starter> = {
     identity: 'Lives in 12 personnel. Your substitutions never tip what is coming.',
     camp: [{ group: '12', drill: 'film' }],
     plays: [
-      ['Singleback', 'Outside Zone', 1],
-      ['Singleback', 'Dig', 1],
-      ['Gun 12', 'Crosser', 1],
-      ['Gun 12', 'TE Leak', 1],
+      ['Outside Zone', 1],
+      ['Counter', 1],
+      ['Dig', 2],
+      ['TE Leak', 1],
+      ['Crosser', 1],
+      ['Stick', 1],
+      // Its finisher: the shot out of a look that has been running all day.
+      ['Play Action', 1],
     ],
     adjustments: [],
   },
@@ -472,7 +480,12 @@ export const STARTERS: Record<StyleName, Starter> = {
 export type PlayCard = {
   id: number
   type: 'play'
-  form: OffFormationName
+  /**
+   * Just the play. The formation is chosen at the line, not baked into the
+   * card — you line up, they match your personnel, and then you call anything
+   * that formation can run. A card that carried its own formation stranded you
+   * on most snaps and made the two halves of the decision one thing.
+   */
   play: OffPlayName
 }
 
@@ -492,8 +505,8 @@ export function makeCards(
 ): Card[] {
   const cards: Card[] = []
   let id = firstId
-  for (const [form, play, count] of plays) {
-    for (let i = 0; i < count; i++) cards.push({ id: id++, type: 'play', form, play })
+  for (const [play, count] of plays) {
+    for (let i = 0; i < count; i++) cards.push({ id: id++, type: 'play', play })
   }
   for (const [name, count] of adjustments) {
     for (let i = 0; i < count; i++) cards.push({ id: id++, type: 'adj', name })

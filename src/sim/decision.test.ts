@@ -10,7 +10,7 @@ import { NO_MODS } from '../game/resolve'
 import { resolveSnap } from '../game/snap'
 import {
   callPlay,
-  declarePersonnel,
+  declareFormation,
   fieldGoal,
   legalPlays,
   newGame,
@@ -39,7 +39,7 @@ function expectedValue(game: Game, card: PlayCard, salt: number): number {
     const { result } = resolveSnap(
       {
         opponent: OPPONENTS[game.opponentName],
-        formName: card.form,
+        formName: game.formation ?? 'Singleback',
         playName: card.play,
         defFormName: game.defForm,
         coverageName: game.defCov,
@@ -83,7 +83,7 @@ function collectDecisions(archetype: DeckName, opponentName: string, games: numb
 
     while (game.phase !== 'over' && steps++ < 500) {
       if (game.phase === 'personnel') {
-        game = declarePersonnel(game, coachPolicy.personnel(game, rng), rng)
+        game = declareFormation(game, coachPolicy.formation(game, rng), rng)
         continue
       }
       if (game.phase === 'result') {
@@ -223,7 +223,7 @@ function evWithTrials(game: Game, card: PlayCard, salt: number, trials: number):
     const { result } = resolveSnap(
       {
         opponent: OPPONENTS[game.opponentName],
-        formName: card.form,
+        formName: game.formation ?? 'Singleback',
         playName: card.play,
         defFormName: game.defForm,
         coverageName: game.defCov,
@@ -253,7 +253,7 @@ function winRate(archetype: DeckName, opponentName: string, games: number, evMax
     let steps = 0
     while (game.phase !== 'over' && steps++ < 500) {
       if (game.phase === 'personnel') {
-        game = declarePersonnel(game, coachPolicy.personnel(game, rng), rng)
+        game = declareFormation(game, coachPolicy.formation(game, rng), rng)
         continue
       }
       if (game.phase === 'result') {
@@ -339,7 +339,7 @@ function evBlindPick(game: Game, legal: PlayCard[], salt: number): PlayCard {
       const { result } = resolveSnap(
         {
           opponent,
-          formName: card.form,
+          formName: game.formation ?? 'Singleback',
           playName: card.play,
           defFormName: game.defForm,
           coverageName: cov,
@@ -380,7 +380,7 @@ function winRateWith(
     let steps = 0
     while (game.phase !== 'over' && steps++ < 500) {
       if (game.phase === 'personnel') {
-        game = declarePersonnel(game, coachPolicy.personnel(game, rng), rng)
+        game = declareFormation(game, coachPolicy.formation(game, rng), rng)
         continue
       }
       if (game.phase === 'result') {

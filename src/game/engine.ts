@@ -1,7 +1,7 @@
 import { makeRng, pick, shuffle, type Rng } from './rng'
 import {
   buildStarter,
-  COVERAGES,
+  canRun,
   OFF_FORMATIONS,
   OFF_PLAYS,
   PACKAGES,
@@ -29,25 +29,49 @@ export const RULES = {
    * week plays the same regardless of who is across the field.
    *
    * Tuned per tier rather than as a linear step, because the reachable ladder
-   * in five possessions is coarse: 17 (2 TD + FG), 21 (3 TD), 24 (+FG), 27-28.
-   * 25 and 26 are not reachable at all, so they demand the same drive chart as
-   * 27 — measured, not assumed. Do not expect fine control from this dial.
+   * is coarse — in four possessions it is 14 (2 TD), 17 (+FG), 20-21 (3 TD),
+   * 24, 28. Values between rungs demand the same drive chart as the rung above,
+   * so do not expect fine control from this dial. Measured, not assumed.
+   *
+   * These scale with `possessions`: cutting a possession without lowering these
+   * makes the game literally unwinnable.
    */
-  targets: [17, 21, 25] as readonly number[],
+  /**
+   * What an encounter is, by opponent tier. Early weeks are a single drive:
+   * score or you lose. A one-drive game has only three outcomes — touchdown,
+   * field goal, nothing — so no points bar can discriminate inside it, and it
+   * IS close to a coin flip however well you play. That is deliberate. The
+   * season is where skill accumulates, which is why there are many short
+   * encounters rather than a few long ones.
+   */
+  shape: [
+    // A one-drive bar of 7 is touchdown-or-nothing, which only an explosive
+    // deck can pass — measured: it put Ground & Pound at 13% and Air Raid at
+    // 58%. A bar of 3 asks you to move the chains into range instead, which is
+    // a test both kinds of offense can actually take.
+    { drives: 1, target: 3 },
+    { drives: 2, target: 10 },
+    { drives: 3, target: 17 },
+  ] as readonly { drives: number; target: number }[],
+  targets: [13, 17, 21] as readonly number[],
   /**
    * The tier-1 bar, and the default for a one-off game with no season around
    * it. Deliberately left where the fourth-down decision is genuinely close:
    * one point higher and going for it dominates kicking everywhere.
    */
-  target: 17,
-  possessions: 5,
+  target: 13,
+  possessions: 4,
   handSize: 6,
   maxCharge: 4,
   maxChips: 5,
 } as const
 
+/** How long an encounter with this tier runs, and what beating them takes. */
+export const shapeFor = (tier: number) =>
+  RULES.shape[tier - 1] ?? RULES.shape[RULES.shape.length - 1]
+
 /** What it takes to win against an opponent of this tier. */
-export const targetFor = (tier: number) => RULES.targets[tier - 1] ?? RULES.target
+export const targetFor = (tier: number) => shapeFor(tier).target
 
 export type Phase = 'personnel' | 'call' | 'result' | 'over'
 
@@ -70,6 +94,8 @@ export type Game = {
   opponentName: string
   /** Points needed to win this one. Rises with the opponent's tier. */
   target: number
+  /** Drives you get. Early encounters are one — score or lose. */
+  possessions: number
 
   deck: Card[]
   hand: Card[]
@@ -87,13 +113,16 @@ export type Game = {
   phase: Phase
   won: boolean
 
+  /** The formation you lined up in. Personnel is implied by it. */
+  formation: OffFormationName | null
   declared: Personnel | null
   defPack: PackageName | null
   defForm: DefFormationName | null
   defCov: CoverageName | null
   defAdj: DefAdjName | null
 
-  groupsInHand: Personnel[]
+  /** How many plays in hand each formation could actually run. */
+  optionsByFormation: Record<OffFormationName, number>
   tossUsed: boolean
   /** An audible frees the call from the personnel that was declared. */
   audibled: boolean
@@ -102,9 +131,8 @@ export type Game = {
   juiceArmed: boolean
   freshArmed: boolean
 
-  /** What a Motion or Hot Read card revealed, if anything. */
+  /** What this down's adjustment card did, for the panel to report. */
   known: string | null
-  disguised: boolean
 
   lastSnap: SnapOutcome | null
   /**
@@ -127,15 +155,35 @@ const isPlayCard = (c: Card): c is PlayCard => c.type === 'play'
 const opponentOf = (game: Game): Opponent => OPPONENTS[game.opponentName]
 
 /**
- * The plays that may actually be called right now. Personnel binds the call —
- * those eleven are on the field until the next snap — unless an audible has
- * freed it.
+ * What you can actually call. The formation you lined up in decides it — not
+ * which card happened to be printed with which formation. An audible frees the
+ * call from the formation entirely.
  */
 export const legalPlays = (game: Game): PlayCard[] =>
   game.hand.filter(
     (c): c is PlayCard =>
-      c.type === 'play' && (game.audibled || personnelOf(c.form) === game.declared),
+      c.type === 'play' && (game.audibled || (!!game.formation && canRun(game.formation, c.play))),
   )
+
+/**
+ * Formations the hand can actually run something out of. Lining up somewhere
+ * with nothing to call is a mistake a player is allowed to make, but it should
+ * never be the only thing on offer.
+ */
+export function playableFormations(game: Game): OffFormationName[] {
+  const forms = Object.keys(OFF_FORMATIONS) as OffFormationName[]
+  const open = forms.filter((f) => (game.optionsByFormation[f] ?? 0) > 0)
+  return open.length > 0 ? open : forms
+}
+
+/** How many plays in hand each formation unlocks, so the choice is legible. */
+export function optionsFor(hand: readonly Card[]): Record<OffFormationName, number> {
+  const out = {} as Record<OffFormationName, number>
+  for (const form of Object.keys(OFF_FORMATIONS) as OffFormationName[]) {
+    out[form] = hand.filter((c) => c.type === 'play' && canRun(form, c.play)).length
+  }
+  return out
+}
 
 export const spot = (y: number) =>
   y <= 50 ? `own ${Math.round(y)}` : `opp ${Math.round(100 - y)}`
@@ -160,12 +208,15 @@ function drawTo(target: number, pile: Pile, rng: Rng): Pile {
   return { deck, hand, discard }
 }
 
-export function declarePersonnel(game: Game, pers: Personnel, rng: Rng): Game {
+/** Line up. They see the personnel that implies, and answer it. */
+export function declareFormation(game: Game, form: OffFormationName, rng: Rng): Game {
+  const pers = personnelOf(form)
   const opponent = opponentOf(game)
   const pack = opponent.match(pers)
   const spec = PACKAGES[pack]
   return {
     ...game,
+    formation: form,
     declared: pers,
     defPack: pack,
     defForm: pick(spec.forms, rng),
@@ -198,7 +249,7 @@ function startDown(game: Game, rng: Rng, fresh: boolean): Game {
     )
   }
 
-  const groups = [...new Set(drawn.hand.filter(isPlayCard).map((c) => personnelOf(c.form)))]
+  const options = optionsFor(drawn.hand)
 
   const next: Game = {
     ...game,
@@ -208,7 +259,8 @@ function startDown(game: Game, rng: Rng, fresh: boolean): Game {
     ballOn,
     toGo,
     notice,
-    groupsInHand: groups,
+    optionsByFormation: options,
+    formation: null,
     declared: null,
     defPack: null,
     defForm: null,
@@ -221,15 +273,13 @@ function startDown(game: Game, rng: Rng, fresh: boolean): Game {
     juiceArmed: false,
     freshArmed: false,
     known: null,
-    disguised: false,
     lastSnap: null,
     lastSnapInput: null,
     lastCall: null,
     phase: 'personnel',
   }
 
-  // Only one group on the field means there is no decision to make.
-  return groups.length === 1 ? declarePersonnel(next, groups[0], rng) : next
+  return next
 }
 
 export function newGame(
@@ -247,6 +297,8 @@ export function newGame(
     intel?: readonly string[]
     /** Points needed to win. Defaults to the tier-1 bar. */
     target?: number
+    /** Drives available. Defaults to the standing rule. */
+    possessions?: number
   },
   rng: Rng = makeRng(opts.seed),
 ): Game {
@@ -254,6 +306,7 @@ export function newGame(
     archetype: opts.archetype,
     opponentName: opts.opponentName,
     target: opts.target ?? RULES.target,
+    possessions: opts.possessions ?? RULES.possessions,
     deck: opts.deck ? shuffle(opts.deck, rng) : buildStarter(opts.archetype, rng),
     hand: [],
     discard: [],
@@ -267,12 +320,13 @@ export function newGame(
     challengeUsed: false,
     phase: 'personnel',
     won: false,
+    formation: null,
     declared: null,
     defPack: null,
     defForm: null,
     defCov: null,
     defAdj: null,
-    groupsInHand: [],
+    optionsByFormation: optionsFor([]),
     tossUsed: false,
     audibled: false,
     quickArmed: false,
@@ -280,7 +334,6 @@ export function newGame(
     juiceArmed: false,
     freshArmed: false,
     known: null,
-    disguised: false,
     lastSnap: null,
     lastSnapInput: null,
     lastCall: null,
@@ -332,30 +385,41 @@ export function hurryUp(game: Game, rng: Rng): Game {
 }
 
 /** Motion or Hot Read: buy information about the coverage. One read per down. */
+/**
+ * The coverage is on screen from the moment personnel is declared, so these two
+ * no longer buy information — they change the picture instead. A card that only
+ * told you what you can already see would be a dead draw.
+ */
 export function playInfoCard(game: Game, cardId: number, rng: Rng): Game {
-  if (game.known !== null || !game.defCov) return game
+  if (game.known !== null || !game.defCov || !game.defPack) return game
   const card = game.hand.find((c) => c.id === cardId)
   if (!card || card.type !== 'adj') return game
   if (card.name !== 'Motion' && card.name !== 'Hot Read') return game
 
-  const spent: Game = {
+  const spend = (note: string, extra: Partial<Game> = {}): Game => ({
     ...game,
     hand: game.hand.filter((c) => c.id !== cardId),
     discard: [...game.discard, card],
-  }
+    known: note,
+    ...extra,
+  })
 
   if (card.name === 'Hot Read') {
-    return { ...spent, known: game.defCov, disguised: false }
+    // Film room: uncover something they were hiding. Refuses rather than
+    // wasting itself when there is nothing left to find.
+    const rules = opponentOf(game).rules
+    const hidden = Object.keys(rules).filter((k) => !rules[k].visible && !game.revealed[k])
+    if (hidden.length === 0) return game
+    const found = hidden[0]
+    return spend(`film — ${rules[found].name}`, { revealed: { ...game.revealed, [found]: true } })
   }
 
-  // Motion only tells you man or zone, and they lie about it 30% of the time.
-  const truth = COVERAGES[game.defCov].man ? 'man' : 'zone'
-  const lying = rng() < 0.3
-  return {
-    ...spent,
-    known: lying ? (truth === 'man' ? 'zone' : 'man') : truth,
-    disguised: lying,
-  }
+  // Motion: they drop this coverage and show a different one. Always a real
+  // change, and never guaranteed to be a better one.
+  const pool = PACKAGES[game.defPack].covs.filter((c) => c !== game.defCov)
+  if (pool.length === 0) return game
+  const shifted = opponentOf(game).pickCoverage(pool, { down: game.down, toGo: game.toGo }, rng)
+  return spend(`motion — they rotated to ${shifted}`, { defCov: shifted })
 }
 
 /**
@@ -451,8 +515,10 @@ function pickDefAdj(form: OffFormationName, rng: Rng): DefAdjName | null {
 export function callPlay(game: Game, cardId: number, rng: Rng): Game {
   const card = game.hand.find((c) => c.id === cardId)
   if (!card || !isPlayCard(card)) return game
-  if (!game.defForm || !game.defCov || !game.defPack || !game.declared) return game
-  if (!game.audibled && personnelOf(card.form) !== game.declared) return game
+  if (!game.defForm || !game.defCov || !game.defPack || !game.formation) return game
+  // The formation you lined up in is what gates the call, not the card.
+  if (!game.audibled && !canRun(game.formation, card.play)) return game
+  const form = game.formation
 
   let hand = game.hand
   let discard = game.discard
@@ -475,10 +541,10 @@ export function callPlay(game: Game, cardId: number, rng: Rng): Game {
   const fresh = game.freshArmed && chips >= 2
   if (fresh) chips -= 2
 
-  const defAdj = quick ? null : pickDefAdj(card.form, rng)
+  const defAdj = quick ? null : pickDefAdj(form, rng)
 
   const input: Omit<SnapInput, 'opponent'> = {
-    formName: card.form,
+    formName: form,
     playName: card.play,
     defFormName: game.defForm,
     coverageName: game.defCov,
@@ -519,7 +585,7 @@ export function callPlay(game: Game, cardId: number, rng: Rng): Game {
     down: game.down,
     toGo: game.toGo,
     at: spot(game.ballOn),
-    call: `${game.declared} · ${card.form} / ${card.play}`,
+    call: `${game.declared} · ${form} / ${card.play}`,
     def: `${game.defPack} ${game.defForm} ${game.defCov}${defAdj ? ` +${defAdj}` : ''}${
       quick ? ' (quick)' : ''
     }${spent ? ` [${spent}●]` : ''}`,
@@ -539,7 +605,7 @@ export function callPlay(game: Game, cardId: number, rng: Rng): Game {
     ruleFireCounts,
     lastSnap: outcome,
     lastSnapInput: input,
-    lastCall: { form: card.form, play: card.play },
+    lastCall: { form, play: card.play },
     log: [entry, ...game.log],
     phase: 'result',
   }
@@ -567,7 +633,7 @@ function endDrive(
   }
 
   if (total >= game.target) return { ...base, phase: 'over', won: true }
-  if (possessionsUsed >= RULES.possessions) return { ...base, phase: 'over', won: false }
+  if (possessionsUsed >= game.possessions) return { ...base, phase: 'over', won: false }
   return startDown(base, rng, true)
 }
 

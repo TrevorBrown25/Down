@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { makeRng } from './rng'
-import { legalPlays, nextDown, callPlay, declarePersonnel } from './engine'
+import { callPlay, declareFormation, legalPlays, nextDown, playableFormations } from './engine'
 import { finishGame, newRun, startGame, type Run } from './run'
 import { decode, encode, SAVE_VERSION, type SaveFile } from './save'
 
@@ -40,7 +40,7 @@ function midSeason(): { save: SaveFile; run: Run } {
   run = { ...run, pendingEvent: null, pendingShop: null, pending: null }
 
   let game = startGame(run, rng)
-  if (game.phase === 'personnel') game = declarePersonnel(game, game.groupsInHand[0], rng)
+  if (game.phase === 'personnel') game = declareFormation(game, playableFormations(game)[0], rng)
   const legal = legalPlays(game)
   if (legal.length > 0) {
     game = callPlay(game, legal[0].id, rng)

@@ -1,13 +1,13 @@
 import { create } from 'zustand'
 import { makeRng, type Rng } from '../game/rng'
-import type { Personnel, StyleName } from '../game/cards'
+import type { OffFormationName, StyleName } from '../game/cards'
 import { SAVE_VERSION } from '../game/save'
 import * as storage from './storage'
 import {
   armChip,
   callPlay,
   challenge,
-  declarePersonnel,
+  declareFormation,
   fieldGoal,
   hurryUp,
   nextDown,
@@ -64,7 +64,7 @@ type Store = {
   abandon: () => void
 
   /* game */
-  declare: (pers: Personnel) => void
+  declare: (form: OffFormationName) => void
   call: (cardId: number) => void
   advance: () => void
   toss: (cardId: number) => void
@@ -164,7 +164,7 @@ export const useGame = create<Store>((set, get) => {
       set({ run: null, game: null, resumable: false, screen: 'menu' })
     },
 
-    declare: (pers) => step((g, rng) => declarePersonnel(g, pers, rng)),
+    declare: (form) => step((g, rng) => declareFormation(g, form, rng)),
     call: (cardId) => step((g, rng) => callPlay(g, cardId, rng)),
     advance: () => step((g, rng) => nextDown(g, rng)),
     toss: (cardId) => step((g, rng) => toss(g, cardId, rng)),

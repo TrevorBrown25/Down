@@ -19,7 +19,7 @@ import type { Run } from './run'
  * forty minutes of someone's evening, so the rule is: validate hard, and when
  * it fails say so plainly rather than resuming into a broken game.
  */
-export const SAVE_VERSION = 1
+export const SAVE_VERSION = 4
 
 /** Enums come from the real tables, so a schema can never drift from the game. */
 const keysOf = <T extends object>(o: T) => Object.keys(o) as [string, ...string[]]
@@ -37,7 +37,7 @@ const drill = z.enum(keysOf(DRILLS))
 const defAdj = z.enum(['Run Commit', 'Creeper', 'Bail'])
 
 const card = z.discriminatedUnion('type', [
-  z.object({ id: z.number(), type: z.literal('play'), form: formation, play }),
+  z.object({ id: z.number(), type: z.literal('play'), play }),
   z.object({ id: z.number(), type: z.literal('adj'), name: adjustment }),
 ])
 
@@ -123,6 +123,7 @@ const gameSchema = z.object({
   archetype: style,
   opponentName,
   target: z.number(),
+  possessions: z.number(),
   deck: z.array(card),
   hand: z.array(card),
   discard: z.array(card),
@@ -136,12 +137,13 @@ const gameSchema = z.object({
   challengeUsed: z.boolean(),
   phase: z.enum(['personnel', 'call', 'result', 'over']),
   won: z.boolean(),
+  formation: formation.nullable(),
   declared: personnel.nullable(),
   defPack: packageName.nullable(),
   defForm: defFormation.nullable(),
   defCov: coverage.nullable(),
   defAdj: defAdj.nullable(),
-  groupsInHand: z.array(personnel),
+  optionsByFormation: z.record(formation, z.number()),
   tossUsed: z.boolean(),
   audibled: z.boolean(),
   quickArmed: z.boolean(),
@@ -149,7 +151,6 @@ const gameSchema = z.object({
   juiceArmed: z.boolean(),
   freshArmed: z.boolean(),
   known: z.string().nullable(),
-  disguised: z.boolean(),
   lastSnap: z
     .object({ result: playResult, fired: z.array(z.string()), chargeUsed: z.number() })
     .nullable(),

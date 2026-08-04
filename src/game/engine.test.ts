@@ -1,15 +1,17 @@
 import { describe, expect, test } from 'vitest'
 import { makeRng } from './rng'
-import { OFF_PLAYS, personnelOf } from './cards'
+import { canRun, OFF_PLAYS, PACKAGES, type PlayCard } from './cards'
+import { OPPONENTS } from './opponents'
 import {
   armChip,
   callPlay,
   challenge,
-  declarePersonnel,
+  declareFormation,
   hurryUp,
   newGame,
   nextDown,
   legalPlays,
+  playableFormations,
   playAudible,
   playInfoCard,
   punt,
@@ -105,7 +107,7 @@ describe('the ◆ charge', () => {
     const dealt = { ...start(), charge: 3 }
     const run = dealt.hand.find((c) => c.type === 'play' && OFF_PLAYS[c.play].kind === 'run')
     if (!run || run.type !== 'play') throw new Error('expected a run in the opening hand')
-    const g = declarePersonnel(dealt, personnelOf(run.form), makeRng(5))
+    const g = declareFormation(dealt, playableFormations(dealt)[0], makeRng(5))
     expect(callPlay(g, run.id, makeRng(5)).charge).toBe(4)
   })
 
@@ -113,7 +115,7 @@ describe('the ◆ charge', () => {
     const dealt = { ...start({ archetype: 'Pro Style' }), charge: 3 }
     const pa = dealt.hand.find((c) => c.type === 'play' && c.play === 'Play Action')
     if (!pa || pa.type !== 'play') return // not in this deal; covered by snap tests
-    const g = declarePersonnel(dealt, personnelOf(pa.form), makeRng(5))
+    const g = declareFormation(dealt, playableFormations(dealt)[0], makeRng(5))
     expect(callPlay(g, pa.id, makeRng(5)).charge).toBe(0)
   })
 })
@@ -131,7 +133,7 @@ describe('possession changes', () => {
 
 describe('defensive play-calling', () => {
   // Regression for the prototype bug: the defense picked its coverage from the
-  // down that had just finished, because declarePersonnel read a stale closure.
+  // down that had just finished, because declareFormation read a stale closure.
   // The Gamblers always blitz on 3rd down, so a converted 3rd down used to carry
   // the blitz into the following 1st down every single time.
   test('reads the down about to be played, not the one just finished', () => {
@@ -141,7 +143,7 @@ describe('defensive play-calling', () => {
       const next = nextDown(withOutcome(g, 9), makeRng(seed))
       expect(next.down).toBe(1)
       const declared =
-        next.phase === 'call' ? next : declarePersonnel(next, next.groupsInHand[0], makeRng(seed))
+        next.phase === 'call' ? next : declareFormation(next, playableFormations(next)[0], makeRng(seed))
       coverages.add(declared.defCov ?? 'none')
     }
     // With the bug this set is exactly {'Cover 1 Blitz'} on every seed.
@@ -154,7 +156,7 @@ describe('defensive play-calling', () => {
       const next = nextDown(withOutcome(g, 1), makeRng(seed))
       expect(next.down).toBe(3)
       const declared =
-        next.phase === 'call' ? next : declarePersonnel(next, next.groupsInHand[0], makeRng(seed))
+        next.phase === 'call' ? next : declareFormation(next, playableFormations(next)[0], makeRng(seed))
       expect(declared.defCov).toBe('Cover 1 Blitz')
     }
   })
@@ -163,7 +165,7 @@ describe('defensive play-calling', () => {
 /** A game sitting at the call, with the defense already showing a look. */
 const called = (over: Partial<Parameters<typeof newGame>[0]> = {}): Game => {
   const g = start(over)
-  return g.phase === 'call' ? g : declarePersonnel(g, g.groupsInHand[0], makeRng(1))
+  return g.phase === 'call' ? g : declareFormation(g, playableFormations(g)[0], makeRng(1))
 }
 
 const adjCard = (g: Game, name: string) =>
@@ -214,55 +216,82 @@ describe('hurry-up', () => {
   })
 })
 
-describe('Motion', () => {
+describe('Motion — shifting the picture', () => {
   const withMotion = (seed: number): Game => {
     const g = called({ seed })
     const motion = adjCard(g, 'Motion')
     return motion ? g : { ...g, hand: [...g.hand, { id: 999, type: 'adj', name: 'Motion' }] }
   }
 
-  test('reads man or zone and spends the card', () => {
+  test('rotates them into a different coverage and spends the card', () => {
+    // The coverage is on screen now, so this buys a change, not a look.
     const g = withMotion(1)
     const card = adjCard(g, 'Motion')
     if (!card) throw new Error('expected a Motion card')
     const after = playInfoCard(g, card.id, makeRng(1))
-    expect(['man', 'zone']).toContain(after.known)
+    expect(after.defCov).not.toBe(g.defCov)
     expect(after.hand.map((c) => c.id)).not.toContain(card.id)
     expect(after.discard.map((c) => c.id)).toContain(card.id)
   })
 
-  test('sometimes lies, and the lie is the opposite of the truth', () => {
-    let lies = 0
-    let truths = 0
-    for (let seed = 1; seed <= 200; seed++) {
+  test('always lands on something they could actually be in', () => {
+    for (let seed = 1; seed <= 60; seed++) {
       const g = withMotion(seed)
       const card = adjCard(g, 'Motion')
-      if (!card || !g.defCov) continue
-      const truth = COVERAGES[g.defCov].man ? 'man' : 'zone'
+      if (!card || !g.defPack) continue
       const after = playInfoCard(g, card.id, makeRng(seed))
-      if (after.disguised) {
-        lies++
-        expect(after.known).not.toBe(truth)
-      } else {
-        truths++
-        expect(after.known).toBe(truth)
-      }
+      expect(PACKAGES[g.defPack].covs).toContain(after.defCov)
     }
-    expect(lies).toBeGreaterThan(0)
-    expect(truths).toBeGreaterThan(lies)
+  })
+
+  test('is a gamble — the rotation is sometimes worse for you', () => {
+    // If it always improved the picture it would not be a decision.
+    let toMan = 0
+    let toZone = 0
+    for (let seed = 1; seed <= 120; seed++) {
+      const g = withMotion(seed)
+      const card = adjCard(g, 'Motion')
+      if (!card) continue
+      const after = playInfoCard(g, card.id, makeRng(seed))
+      if (!after.defCov) continue
+      if (COVERAGES[after.defCov].man) toMan++
+      else toZone++
+    }
+    expect(toMan).toBeGreaterThan(0)
+    expect(toZone).toBeGreaterThan(0)
+  })
+
+  test('reports what it did', () => {
+    const g = withMotion(1)
+    const card = adjCard(g, 'Motion')
+    if (!card) throw new Error('expected a Motion card')
+    expect(playInfoCard(g, card.id, makeRng(1)).known).toMatch(/motion/i)
   })
 })
 
-describe('Hot Read', () => {
-  test('names the exact coverage and never lies', () => {
-    const base = called()
-    const g: Game = { ...base, hand: [...base.hand, { id: 998, type: 'adj', name: 'Hot Read' }] }
-    const after = playInfoCard(g, 998, makeRng(1))
-    expect(after.known).toBe(g.defCov)
-    expect(after.disguised).toBe(false)
+describe('Hot Read — the film room', () => {
+  const withHotRead = (base: Game): Game => ({
+    ...base,
+    hand: [...base.hand, { id: 998, type: 'adj', name: 'Hot Read' }],
   })
 
-  test('only one read per down', () => {
+  test('uncovers a rule they were hiding', () => {
+    const g = withHotRead(called())
+    const after = playInfoCard(g, 998, makeRng(1))
+    const found = Object.keys(after.revealed).filter((k) => !g.revealed[k])
+    expect(found).toHaveLength(1)
+    expect(OPPONENTS[g.opponentName].rules[found[0]].visible).toBe(false)
+  })
+
+  test('never wastes itself when there is nothing left to find', () => {
+    const base = called()
+    const rules = OPPONENTS[base.opponentName].rules
+    const allKnown = Object.fromEntries(Object.keys(rules).map((k) => [k, true]))
+    const g = withHotRead({ ...base, revealed: allKnown })
+    expect(playInfoCard(g, 998, makeRng(1))).toBe(g)
+  })
+
+  test('only one adjustment per down', () => {
     const base = called()
     const g: Game = {
       ...base,
@@ -276,7 +305,6 @@ describe('Hot Read', () => {
     expect(playInfoCard(after, 997, makeRng(1))).toBe(after)
   })
 })
-
 describe('arming chips', () => {
   test('toggles on and back off', () => {
     const g = called()
@@ -373,25 +401,35 @@ describe('Audible', () => {
     hand: [...g.hand, { id: 900, type: 'adj', name: 'Audible' }],
   })
 
-  const offGroupPlay = (g: Game) => {
-    const card = g.hand.find((c) => c.type === 'play' && personnelOf(c.form) !== g.declared)
-    if (!card || card.type !== 'play') throw new Error('expected an out-of-personnel play in hand')
-    return card
+  /**
+   * A hand lined up in I-Form holding Four Verticals — which needs a spread set
+   * and so cannot be run from here. Constructed rather than found: now that most
+   * plays run from most formations, a stranded one has to be arranged.
+   */
+  const stranded = (): { game: Game; card: PlayCard } => {
+    const base = start()
+    const card: PlayCard = { id: 950, type: 'play', play: 'Four Verticals' }
+    const g = declareFormation(
+      { ...base, hand: [...base.hand, card, { id: 900, type: 'adj', name: 'Audible' }] },
+      'I-Form',
+      makeRng(1),
+    )
+    expect(canRun('I-Form', 'Four Verticals')).toBe(false)
+    return { game: g, card }
   }
 
-  test('unlocks a play the declared personnel could not run', () => {
-    const g = withAudible(called())
-    const other = offGroupPlay(g)
-    // Refused while the personnel still binds.
-    expect(callPlay(g, other.id, makeRng(1))).toBe(g)
+  test('unlocks a play the formation could not run', () => {
+    const { game: g, card } = stranded()
+    // Refused while the formation still binds.
+    expect(callPlay(g, card.id, makeRng(1))).toBe(g)
 
     const after = playAudible(g, 900, makeRng(1))
     expect(after.audibled).toBe(true)
-    expect(callPlay(after, other.id, makeRng(1)).lastCall?.play).toBe(other.play)
+    expect(callPlay(after, card.id, makeRng(1)).lastCall?.play).toBe('Four Verticals')
   })
 
   test('widens the legal set', () => {
-    const g = withAudible(called())
+    const { game: g } = stranded()
     expect(legalPlays(playAudible(g, 900, makeRng(1))).length).toBeGreaterThan(
       legalPlays(g).length,
     )
@@ -415,9 +453,10 @@ describe('Audible', () => {
       ],
     }
     const read = playInfoCard(g, 901, makeRng(1))
-    expect(read.known).toBe(g.defCov)
+    expect(read.known).not.toBeNull()
+    // The adjustment survives the audible: both fit inside one down.
     const after = playAudible(read, 900, makeRng(1))
-    expect(after.known).toBe(g.defCov)
+    expect(after.known).toBe(read.known)
     expect(after.audibled).toBe(true)
   })
 

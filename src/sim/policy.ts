@@ -3,12 +3,21 @@ import {
   COVERAGES,
   OFF_FORMATIONS,
   OFF_PLAYS,
+  personnelOf,
   type Coverage,
   type CoverageName,
+  type OffFormationName,
   type Personnel,
   type PlayCard,
 } from '../game/cards'
-import { armChip, legalPlays, playAudible, playInfoCard, type Game } from '../game/engine'
+import {
+  armChip,
+  legalPlays,
+  playableFormations,
+  playAudible,
+  playInfoCard,
+  type Game,
+} from '../game/engine'
 
 /** How much better the freed option must look before spending the audible. */
 const AUDIBLE_THRESHOLD = 3
@@ -17,7 +26,8 @@ export type FourthDown = 'go' | 'punt' | 'fg'
 
 export type Policy = {
   name: string
-  personnel: (game: Game, rng: Rng) => Personnel
+  /** Which formation to line up in. Personnel — and their answer — follows. */
+  formation: (game: Game, rng: Rng) => OffFormationName
   play: (game: Game, legal: PlayCard[], rng: Rng) => PlayCard
   fourthDown: (game: Game) => FourthDown
   /** Optional: arm chips, buy a read, toss. Runs before the play is chosen. */
@@ -29,7 +39,7 @@ export type Policy = {
 /** The floor: no thought at all. Anything a real player does should beat this. */
 export const randomPolicy: Policy = {
   name: 'random',
-  personnel: (game, rng) => pick(game.groupsInHand, rng),
+  formation: (game, rng) => pick(playableFormations(game), rng),
   play: (_game, legal, rng) => pick(legal, rng),
   fourthDown: () => 'go',
 }
@@ -41,9 +51,13 @@ export const randomPolicy: Policy = {
  */
 export const coachPolicy: Policy = {
   name: 'coach',
-  personnel: (game, rng) => {
+  formation: (game, rng) => {
+    // Heavy when it is short, spread when it is long — but never into a
+    // formation the hand cannot run anything out of.
     const want: Personnel = game.toGo <= 3 ? '21' : game.toGo >= 8 ? '11' : '12'
-    return game.groupsInHand.includes(want) ? want : pick(game.groupsInHand, rng)
+    const open = playableFormations(game)
+    const match = open.filter((f) => personnelOf(f) === want)
+    return match.length > 0 ? match[0] : pick(open, rng)
   },
   play: (game, legal) => {
     const score = (card: PlayCard) => {
@@ -74,11 +88,13 @@ export const coachPolicy: Policy = {
  */
 export const grinderPolicy: Policy = {
   name: 'grinder',
-  personnel: (game, rng) => {
+  formation: (game, rng) => {
+    const open = playableFormations(game)
     for (const want of ['21', '12'] as Personnel[]) {
-      if (game.groupsInHand.includes(want)) return want
+      const match = open.filter((f) => personnelOf(f) === want)
+      if (match.length > 0) return match[0]
     }
-    return pick(game.groupsInHand, rng)
+    return pick(open, rng)
   },
   play: (_game, legal) => {
     const score = (card: PlayCard) => {
@@ -244,7 +260,8 @@ export const quickCountPolicy: Policy = {
     const intended = coachPolicy.play(game, legal, rng)
     const play = OFF_PLAYS[intended.play]
     // Only worth a card when the adjustment we are denying would have hurt.
-    if (play.kind !== 'run' || OFF_FORMATIONS[intended.form].blockers < 7) return game
+    const form = game.formation
+    if (play.kind !== 'run' || !form || OFF_FORMATIONS[form].blockers < 7) return game
     return armChip(game, 'quick')
   },
 }

@@ -9,5 +9,8 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.{ts,tsx}'],
     environment: 'node',
+    // The sim files play hundreds of whole seasons. They are measurements, not
+    // unit tests, and they run long enough to trip the 5s default under load.
+    testTimeout: 30_000,
   },
 })
