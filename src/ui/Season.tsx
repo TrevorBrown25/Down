@@ -1,6 +1,7 @@
 import { OFF_PLAYS, STARTERS, type Card } from '../game/cards'
 import { OPPONENTS } from '../game/opponents'
 import { SEASON, seasonRecord, type Run, type ScheduleNode } from '../game/run'
+import { Conditioning, SheetButton } from './DeckSheet'
 import { useGame } from './store'
 
 const TIER_LABEL = ['', 'warm-up', 'contender', 'title shot']
@@ -186,12 +187,17 @@ export function Season({ run }: { run: Run }) {
           </p>
         </div>
 
-        <button
-          onClick={abandon}
-          className="w-full font-mono text-[9px] uppercase tracking-[0.16em] text-hash transition-colors hover:text-danger"
-        >
-          abandon season
-        </button>
+        <Conditioning trim={run.conditioning} />
+
+        <div className="flex items-center justify-between">
+          <SheetButton />
+          <button
+            onClick={abandon}
+            className="font-mono text-[9px] uppercase tracking-[0.16em] text-hash transition-colors hover:text-danger"
+          >
+            abandon season
+          </button>
+        </div>
       </aside>
     </div>
   )

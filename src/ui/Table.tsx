@@ -6,6 +6,7 @@ import { Field } from './Field'
 import { DEFAULT_FORMATION } from './formations'
 import { Hand } from './Hand'
 import { DriveLog, Matchup, Scoreboard, Scouting } from './Panels'
+import { Conditioning, SheetButton } from './DeckSheet'
 
 function Btn({
   children,
@@ -291,11 +292,11 @@ export function Table({ game }: { game: Game }) {
 
       <aside className="space-y-3">
         <Scouting game={game} />
+        {/* What weeks of practice actually bought, where the call is made. */}
+        <Conditioning trim={game.groupTrim} />
         <DriveLog game={game} />
         <div className="flex items-center justify-between px-1">
-          <span className="font-mono text-[9px] text-hash">
-            deck {game.deck.length} · discard {game.discard.length}
-          </span>
+          <SheetButton />
           <button
             onClick={store.abandon}
             className="font-mono text-[9px] uppercase tracking-[0.16em] text-hash transition-colors hover:text-danger"

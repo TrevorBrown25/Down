@@ -116,6 +116,20 @@ describe('the table', () => {
     expect(html).toContain(game.defCov as string)
   })
 
+  test('what a practice week bought is on screen at the call', () => {
+    // A drill is chosen weeks before it matters. If the table does not say what
+    // the group is carrying, the player has to hold it in their head.
+    store().startRun('Air Raid', 17)
+    store().kickoff()
+    const game = store().game
+    if (!game) throw new Error('no game')
+    // Air Raid comes out of camp with route running and film study banked.
+    expect(Object.keys(game.groupTrim).length).toBeGreaterThan(0)
+    const html = renderToStaticMarkup(<Table game={game} />)
+    expect(html).toContain('what they can do')
+    expect(html).toMatch(/vs man|vs zone|blocker/)
+  })
+
   test('renders the fourth-down kick and punt paths', () => {
     store().startRun('Ground & Pound', 5)
     store().kickoff()

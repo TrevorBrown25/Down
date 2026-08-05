@@ -324,6 +324,21 @@ export function combineTrim(conditioning: GroupTrim, injuries: GroupTrim): Group
   return out
 }
 
+/**
+ * What a group is actually carrying, in words. The player buys these weeks in
+ * advance and then has to remember them at the line — so the screen has to say
+ * it rather than expecting them to hold it in their head.
+ */
+export function describeBonus(bonus: GroupBonus): string[] {
+  const out: string[] = []
+  if (bonus.block) {
+    out.push(bonus.block > 0 ? `+${bonus.block} blocker` : `${bonus.block} blocker`)
+  }
+  if (bonus.man) out.push(`+${bonus.man} vs man`)
+  if (bonus.zone) out.push(`+${bonus.zone} vs zone`)
+  return out
+}
+
 /** One line per effect, for the card face. */
 export function describe(effect: EventEffect): string {
   switch (effect.kind) {
