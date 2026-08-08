@@ -19,7 +19,7 @@ import type { Run } from './run'
  * forty minutes of someone's evening, so the rule is: validate hard, and when
  * it fails say so plainly rather than resuming into a broken game.
  */
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 5
 
 /** Enums come from the real tables, so a schema can never drift from the game. */
 const keysOf = <T extends object>(o: T) => Object.keys(o) as [string, ...string[]]
@@ -124,6 +124,7 @@ const gameSchema = z.object({
   opponentName,
   target: z.number(),
   possessions: z.number(),
+  startAt: z.number(),
   deck: z.array(card),
   hand: z.array(card),
   discard: z.array(card),

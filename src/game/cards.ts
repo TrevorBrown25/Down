@@ -443,11 +443,7 @@ export const STARTERS: Record<StyleName, Starter> = {
   'Air Raid': {
     blurb: 'Throw it. Then throw it again.',
     identity: 'Lives in 11 personnel and punishes anyone who stays heavy.',
-    camp: [
-      { group: '11', drill: 'routes' },
-      { group: '11', drill: 'blocking' },
-      { group: '11', drill: 'film' },
-    ],
+    camp: [{ group: '11', drill: 'routes' }],
     plays: [
       ['Four Verticals', 1],
       ['Crosser', 2],

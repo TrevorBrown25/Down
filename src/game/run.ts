@@ -27,14 +27,15 @@ import {
 import { buildShop, ECONOMY, type ShopOffer } from './shop'
 
 export const SEASON = {
+  games: 8,
   /**
-   * Many short encounters rather than a few long ones. A single drive is close
-   * to a coin flip whatever you call, so skill has to accumulate across the
-   * season instead of inside any one game.
+   * Scales with the season length. A single drive is close to a coin flip
+   * whatever you call, so with short encounters this is closer to HP than to
+   * strikes — roughly one loss per two games. Set it too tight and the season
+   * becomes arithmetically impossible before skill gets a say: 14 games against
+   * a 2-loss budget meant winning 12 of 14, which measured 0% for every style.
    */
-  games: 14,
-  /** Absorb two and you are still alive. The third ends it: 6-2 or bust. */
-  lossesAllowed: 6,
+  lossesAllowed: 2,
   draftSize: 3,
   /** Cutting below this would starve the hand. */
   minDeck: 12,
@@ -113,8 +114,8 @@ export type Run = {
  * season game has more to discover rather than just bigger numbers.
  */
 function tierFor(week: number): number {
-  if (week <= 5) return 1
-  if (week <= 10) return 2
+  if (week <= 3) return 1
+  if (week <= 6) return 2
   return 3
 }
 
@@ -213,6 +214,7 @@ export function startGame(run: Run, rng: Rng): Game {
       intel: run.intel,
       target: targetFor(node.tier),
       possessions: shapeFor(node.tier).drives,
+      startAt: shapeFor(node.tier).startAt,
     },
     rng,
   )

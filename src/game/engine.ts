@@ -45,14 +45,18 @@ export const RULES = {
    * encounters rather than a few long ones.
    */
   shape: [
-    // A one-drive bar of 7 is touchdown-or-nothing, which only an explosive
-    // deck can pass — measured: it put Ground & Pound at 13% and Air Raid at
-    // 58%. A bar of 3 asks you to move the chains into range instead, which is
-    // a test both kinds of offense can actually take.
-    { drives: 1, target: 3 },
-    { drives: 2, target: 10 },
-    { drives: 3, target: 17 },
-  ] as readonly { drives: number; target: number }[],
+    // Three dials, all pointing the same way. A one-drive bar of 7 was
+    // touchdown-or-nothing, which only an explosive deck could pass; 3 asks you
+    // to move the chains into range instead. And field position is the dial
+    // that makes a grinding offense viable at all in one drive — measured, a
+    // grind deck's drive dies at the 61, about twelve yards short of a kickable
+    // field goal, so an early encounter starts it most of the way there.
+    // The points bar is quantised — in two drives the rungs are 3, 6, 7, 10 and
+    // nothing between — so field position is the dial that actually tunes.
+    { drives: 1, startAt: 50, target: 3 },
+    { drives: 2, startAt: 28, target: 7 },
+    { drives: 3, startAt: 22, target: 13 },
+  ] as readonly { drives: number; startAt: number; target: number }[],
   targets: [13, 17, 21] as readonly number[],
   /**
    * The tier-1 bar, and the default for a one-off game with no season around
@@ -61,6 +65,8 @@ export const RULES = {
    */
   target: 13,
   possessions: 4,
+  /** Where a drive starts when no encounter shape says otherwise. */
+  startAt: 25,
   handSize: 6,
   maxCharge: 4,
   maxChips: 5,
@@ -96,6 +102,8 @@ export type Game = {
   target: number
   /** Drives you get. Early encounters are one — score or lose. */
   possessions: number
+  /** Where every drive starts. Field position is a difficulty dial. */
+  startAt: number
 
   deck: Card[]
   hand: Card[]
@@ -299,6 +307,8 @@ export function newGame(
     target?: number
     /** Drives available. Defaults to the standing rule. */
     possessions?: number
+    /** Where drives start. Defaults to the standing rule. */
+    startAt?: number
   },
   rng: Rng = makeRng(opts.seed),
 ): Game {
@@ -307,10 +317,11 @@ export function newGame(
     opponentName: opts.opponentName,
     target: opts.target ?? RULES.target,
     possessions: opts.possessions ?? RULES.possessions,
+    startAt: opts.startAt ?? RULES.startAt,
     deck: opts.deck ? shuffle(opts.deck, rng) : buildStarter(opts.archetype, rng),
     hand: [],
     discard: [],
-    ballOn: 25,
+    ballOn: opts.startAt ?? RULES.startAt,
     down: 1,
     toGo: 10,
     points: 0,
@@ -616,7 +627,7 @@ function endDrive(
   points: number,
   text: string,
   rng: Rng,
-  nextBallOn = 25,
+  nextBallOn?: number,
 ): Game {
   const total = game.points + points
   const possessionsUsed = game.possessionsUsed + 1
@@ -626,7 +637,7 @@ function endDrive(
     points: total,
     possessionsUsed,
     log: [{ kind: 'divider', text }, ...game.log],
-    ballOn: nextBallOn,
+    ballOn: nextBallOn ?? game.startAt,
     down: 1,
     toGo: 10,
     charge: 0,
